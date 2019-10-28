@@ -1,0 +1,202 @@
+<html>
+<head>
+<script src="https://cdn.bootcss.com/jquery/3.4.1/jquery.min.js"></script>
+</head>
+<body>
+<h3>MiniShader Client</h3>
+<p>WASDRF to move camera position, IJKL to adjust camera window, OP to adjust view size, ZX to boost, NM to slow<br>
+<span id="status" style="color:red">▉</span> Pos: <span id="pos"></span> Dir: <span id="dir"></span> Up: <span id="up"></span> Hor: <span id="hor"></span> Dis: <span id="dis"></span> Speed: <span id="speed"></span> <input type="button" onclick="javascript:ws.send('?');" value="reset position"> <input type="button" onclick="javascript:shading=0;reshade();" value="force reset"><br>
+<img src="" border="1"></p>
+<script type="text/javascript">
+var sensitivity=50,curkey=0,isup=0;
+var pos=[0,0,0],dir=[0,0,-1],up=[0,1,0],dis=1;
+var angle_per=Math.PI/120,scale_per=0.95,step_per=0.3;
+var last_str='',shading=0,ws;
+function scale()
+{
+    //25 *2  23 *2
+    //13 /2  12 /2
+    var k=0.6;
+    if(curkey&(1<<23)) k*=2;
+    if(curkey&(1<<25)) k*=2;
+    if(curkey&(1<<12)) k/=2;
+    if(curkey&(1<<13)) k/=2;
+    return k;
+}
+function to_str()
+{
+    return pos+','+dir+','+up+','+dis;
+}
+function cross(a,b)
+{
+    return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+}
+function add(a,b)
+{
+    return [a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+}
+function mul(a,x)
+{
+    return [a[0]*x,a[1]*x,a[2]*x];
+}
+function rturn(ang)
+{
+    var hor=cross(dir,up);
+    //rotate(direction,horiztonal)
+    dir=add(mul(hor,Math.cos(ang+Math.PI/2)),mul(dir,Math.sin(ang+Math.PI/2)));
+}
+function dturn(ang)
+{
+    var hor=cross(dir,up);
+    //rotate(up,direction)
+    [up,dir]=[add(mul(up,Math.cos(ang)),mul(dir,Math.sin(ang))),
+    add(mul(up,Math.cos(ang+Math.PI/2)),mul(dir,Math.sin(ang+Math.PI/2)))];
+}
+//hor=dir*up
+//up=hor*dir
+//dir=up*hor
+function reload()
+{
+    document.getElementsByTagName('img')[0].setAttribute('src','test.bmp?'+Math.random());
+}
+
+function help()
+{
+    alert('WASDRF to move camera position, IJKL to adjust camera window, ER to adjust view size');
+}
+function Pretty1(x)
+{
+    return x.toFixed(4)*1;
+}
+function Pretty3(x)
+{
+    return [Pretty1(x[0]),Pretty1(x[1]),Pretty1(x[2])];
+}
+function set_dbg()
+{
+    var hor=cross(dir,up);
+    document.getElementById('pos').innerHTML=Pretty3(pos);
+    document.getElementById('dir').innerHTML=Pretty3(dir);
+    document.getElementById('up').innerHTML=Pretty3(up);
+    document.getElementById('hor').innerHTML=Pretty3(hor);
+    document.getElementById('dis').innerHTML=Pretty1(dis);
+    document.getElementById('speed').innerHTML=scale();
+    if(!isup) document.getElementById('status').setAttribute('style','color:red');
+    else if(shading) document.getElementById('status').setAttribute('style','color:blue');
+    else document.getElementById('status').setAttribute('style','color:lime');
+}
+function reshade()
+{
+    console.log('reshade?');
+    if(shading) return;
+    var str=to_str();
+    shading=1;
+    console.log('new shade request');
+    if(str==last_str) ws.send('M'+str);
+    else ws.send(str),last_str=str;
+}
+
+function deal_key(c)
+{
+    if(curkey&(1<<c));else return;
+    console.log(c);
+    var hor=cross(dir,up),sc=scale();
+    console.log('scale:',sc);
+    if(c==8) //I
+        dturn(-angle_per*sc);
+    else if(c==10) //K
+        dturn(angle_per*sc);
+    else if(c==9) //J
+        rturn(angle_per*sc);
+    else if(c==11) //L
+        rturn(-angle_per*sc);
+    else if(c==14) //O
+        dis*=Math.pow(scale_per,sc);
+    else if(c==15) //P
+        dis/=Math.pow(scale_per,sc);
+    else if(c==22) //W
+        pos=add(pos,mul(dir,step_per*sc));
+    else if(c==18) //S
+        pos=add(pos,mul(dir,-step_per*sc));
+    else if(c==0) //A
+        pos=add(pos,mul(hor,-step_per*sc));
+    else if(c==3) //D
+        pos=add(pos,mul(hor,step_per*sc));
+    else if(c==17) //R
+        pos=add(pos,mul(up,step_per*sc));
+    else if(c==5) //F
+        pos=add(pos,mul(up,-step_per*sc));
+    else return;
+    reshade();
+    setTimeout(function(){deal_key(c);}, sensitivity);
+}
+
+$(document).ready(function(){
+    setInterval("set_dbg();",sensitivity/3.0);
+    $(document).keypress(function(e){
+        var code=e.which;
+        if(code>=97) code=code-97+65;
+        code-=65;
+        if(code>=0&&code<26);else return;
+        if(curkey&(1<<code)) return;
+        curkey|=1<<code;
+        deal_key(code);
+    });
+    $(document).keyup(function(e){
+        var code=e.which-65;
+        if(code>=0&&code<26);else return;
+        curkey&=~(1<<code);
+    });
+    if ("WebSocket" in window)
+    {
+        function connect() {
+        isup=0;
+        ws = new WebSocket("ws://localhost:9002");
+        ws.onopen = function()
+        {
+            isup=1; shading=0; last_str='';
+            console.log('connected');
+            reshade();
+        };
+        ws.onmessage = function(evt)
+        {
+            var msg=evt.data;
+            if(msg.substr(0,5)=="init ")
+            {
+                console.log('init parameter:',msg.substr(5));
+                var res=msg.substr(5).split(',');
+                for(var t=0;t<10;++t) res[t]*=1;
+                pos[0]=res[0];
+                pos[1]=res[1];
+                pos[2]=res[2];
+                dir[0]=res[3];
+                dir[1]=res[4];
+                dir[2]=res[5];
+                up[0]=res[6];
+                up[1]=res[7];
+                up[2]=res[8];
+                dis=res[9];
+                reshade();
+                return;
+            }
+            shading=0;
+            console.log('received new message',msg);
+            reload();
+            reshade();
+        };
+        ws.onclose=function()
+        {
+            console.log('disconnected!!'); isup=0; shading=0; last_str='';
+            setTimeout(function() {connect();}, 1000);
+        };
+        }
+        connect();
+    }
+    else
+    {
+        alert("WebSocket Not Supported!!!");
+    }
+});
+</script>
+</body>
+</html>

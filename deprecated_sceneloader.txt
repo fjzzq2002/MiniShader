@@ -1,0 +1,238 @@
+#ifndef SCENELOADER_H
+#define SCENELOADER_H
+#include <iostream>
+#include "image.h"
+#include "camera.h"
+#include "group.h"
+#include "sphere.h"
+#include "plane.h"
+#include "server.h"
+#include "light.h"
+#include "material.h"
+#include "triangle.h"
+#include "scene.h"
+#include <cmath>
+#include <ctime>
+#include <sstream>
+#include <fstream>
+#include <map>
+#include "nlohmann/json.hpp"
+using json = nlohmann::json;
+template<class T>
+void ParseObj(const char* file_name, std::vector<Object*>& target, T transition, Material* m)
+{
+	FILE* fp = fopen(file_name, "r");
+	if (!fp)
+	{
+		std::cerr << "FAILURE: CANNOT OPEN FILE\n";
+		exit(-1);
+	}
+	char o[3];
+	std::vector<Vector3f> vec;
+	while (fscanf(fp, "%s", o) != EOF)
+	{
+		if (o[0] == 'v')
+		{
+			Vector3f t;
+			double x, y, z;
+			fscanf(fp, "%lf%lf%lf", &x, &y, &z); //is it correct?
+			t[0] = x; t[1] = y; t[2] = z;
+			vec.push_back(transition(t));
+		}
+		else
+		{
+			int x, y, z;
+			fscanf(fp, "%d%d%d", &x, &y, &z);
+			target.push_back(new Triangle(vec[x - 1], vec[y - 1], vec[z - 1], m));
+		}
+	}
+	fclose(fp);
+}
+void cornell_box(Scene& scene)
+{
+	int w = 800, h = 800;
+	std::vector<Object*>& obj = scene.group.obj;
+	std::vector<PointLight*>& light = scene.point_lights;
+	/*
+	vec.push_back(new Sphere(Vector3f(3, 5, 2), 3,
+		new Material(Vector3f(0.85, 0.85, 0.85),
+			Vector3f(0.3, 0.3, 0.3), 0.8, Vector3f(5,10,10))));*/
+	auto wall_mat = new Material(Vector3f(1, 1, 1),
+		Vector3f(0.7, 0.7, 0.7), 0.3),
+		blue_wall_mat = new Material(Vector3f(0, 0, 0.85),
+			Vector3f(0, 0, 0.7), 0.3),
+		red_wall_mat = new Material(Vector3f(0.85, 0, 0),
+			Vector3f(0.7, 0, 0), 0.3),
+		light_mat = new Material(Vector3f(1, 1, 1),
+			Vector3f(0.7, 0.7, 0.7), 0.3, Vector3f(10, 10, 10)),
+		ball_mat = new Material(Vector3f(0.85, 0.85, 0.85),
+			Vector3f(0.9, 0.9, 0.9), 0.05);
+	//walls
+	obj.push_back(new Plane(Vector3f(1, 0, 0), -100, red_wall_mat));
+	obj.push_back(new Plane(Vector3f(-1, 0, 0), -100, blue_wall_mat));
+	obj.push_back(new Plane(Vector3f(0, 1, 0), -100, wall_mat));
+	obj.push_back(new Plane(Vector3f(0, -1, 0), -100, wall_mat));
+	//		new Material(Vector3f(0.85, 0.85, 0.85),
+	//			Vector3f(0.3, 0.3, 0.3), 0.8, Vector3f(0.3, 0.5, 0.5))));
+	obj.push_back(new Plane(Vector3f(0, 0, 1), -100, wall_mat));
+	//	vec.push_back(new Plane(Vector3f(0, 0, -1), -100, wall_mat));
+	//light
+	ParseObj("cube.obj", obj, [&](Vector3f v) {v[0] *= 50; v[2] *= 50; v[1] /= 50; v[1] += 100; v[2] -= 30;  return v; }, light_mat);
+	//ball
+	obj.push_back(new Sphere(Vector3f(-100 + 40, -100 + 25, -60), 25, ball_mat));
+	obj.push_back(new Sphere(Vector3f(100 - 60, -100 + 25, -35), 25, ball_mat));
+	//point_lights.push_back(new PointLight(Vector3f(0,0,0), Vector3f(0.3,0.3,0.3)));
+	scene.group.reset_obj();
+	scene.camera = new PerspectiveCamera(Vector3f(0, 0, 379.54),
+		Vector3f(0, 0, -1),
+		Vector3f(0, 1, 0),
+		w, h, 1286.1582, 0);
+}
+template<class T>
+Vector3f json_to_v3(const T& c)
+{
+	return Vector3f(c[0], c[1], c[2]);
+}
+template<class T>
+PerspectiveCamera* json_parse_camera(const T& c)
+{
+	return new PerspectiveCamera(json_to_v3(c["o"]), json_to_v3(c["d"]), json_to_v3(c["u"]),
+		c["w"], c["h"], c["f"], c["b"]);
+}
+template<class T>
+Material* json_parse_material(const T& c)
+{
+	static std::map<std::string, Material*> mat_map;
+	std::string d = c.dump();
+	if (mat_map.count(d)) return mat_map[d];
+	std::cerr << "new mat: " << d << std::endl;
+	return mat_map[d] = new Material(json_to_v3(c["dc"]), json_to_v3(c["sc"]), c["r"], json_to_v3(c["ec"]));
+}
+template<class T>
+Object* json_parse_object(const T& c)
+{
+	std::cerr << c["class"] << std::endl;
+	if (c["class"] == "Plane")
+		return new Plane(json_to_v3(c["k"]), c["c"], json_parse_material(c["m"]));
+	if (c["class"] == "Sphere")
+		return new Sphere(json_to_v3(c["o"]), c["r"], json_parse_material(c["m"]));
+	if (c["class"] == "Triangle")
+		return new Triangle(json_to_v3(c["a"]),
+			json_to_v3(c["b"]), json_to_v3(c["c"]), json_parse_material(c["m"]));
+	throw "invalid object";
+}
+void load_scene_json(Scene& scene,std::string json)
+{
+	std::ifstream t(json);
+	std::stringstream buffer;
+	buffer << t.rdbuf();
+	std::string tmp = buffer.str();
+	auto u = json::parse(tmp);
+	scene.camera = json_parse_camera(u["cam"]);
+	for (auto obj : u["obj"])
+		scene.group.obj.push_back(json_parse_object(obj));
+	scene.group.reset_obj();
+}
+void load_scene(Scene& scene)
+{
+	return load_scene_json(scene,"scenes/scene.json");
+}
+
+//=== deprecated scenes ===
+/*
+PerspectiveCamera init_scene()
+{
+	std::vector<Object*>& vec = group.obj;
+	vec.push_back(new Sphere(Vector3f(0, 0, 0), 1,
+		new Material(Vector3f(1, 1, 0),
+			Vector3f(1, 1, 1), 0.4)));
+	vec.push_back(new Plane(Vector3f(0, 1, 0), -1.5,
+		new Material(Vector3f(1,1, 1),
+			Vector3f(1, 1, 1), 0.35)));
+	group.reset_obj();
+	point_lights.push_back(new PointLight(Vector3f(0, 5, 5), Vector3f(0.9, 0.9, 0.9)));
+	return PerspectiveCamera(Vector3f(0, 0, 10),
+		Vector3f(0, 0, -1),
+		Vector3f(0, 1, 0),
+		w, h, 1681.01, 0);
+}*/
+
+/*
+PerspectiveCamera init_scene()
+{
+	Material *CASO4= new Material(Vector3f(0.85, 0.85, 0.85),
+		Vector3f(0.3, 0.3, 0.3), 0.8); //note: not scientific at all
+	std::vector<Object*>& vec = group.obj;
+	vec.push_back(new Plane(Vector3f(1, 0, 0), -2.5,
+		new Material(Vector3f(1, 1, 1),
+			Vector3f(1,1,1), 0.05)));
+	ParseObj("cube.obj", vec, [&](Vector3f u) {++u[1]; return u; },
+		new Material(Vector3f(0.85, 0.85, 0.42),
+		Vector3f(0.6,0.6,0.3), 0.4));
+	ParseObj("bunny_1k.obj", vec, [&](Vector3f u) {u[0] *= 5; u[1] *= 5; u[2] *= 5; u[0] -= 1; u[2] += 2; u[1] -= 0.334002;  return u; },
+		new Material(Vector3f(0.85, 0.85, 0.85),
+			Vector3f(0.7, 0.7, 0.7), 0.2));
+//	vec.push_back(new Sphere(Vector3f(0, 0, 0), 1, CASO4));
+	vec.push_back(new Sphere(Vector3f(3, 1, 3), 1,
+		new Material(Vector3f(0, 0.42, 0.85),
+		Vector3f(0, 0.15, 0.3), 0.8)));
+	vec.push_back(new Plane(Vector3f(0, 1, 0), 0,
+		new Material(Vector3f(1, 0, 0),
+			Vector3f(0.1,0.1,0.1), 0.9)));
+	group.reset_obj();
+	//(0,10,5)?
+	point_lights.push_back(new PointLight(Vector3f(5, 6, 5), Vector3f(1, 1,1)));
+	return PerspectiveCamera(Vector3f(3.2042, 3.7431, 9.3591),
+		Vector3f(-0.2364, -0.2259, -0.945),
+		Vector3f(-0.116, 0.9722, -0.2034),
+		w, h, 828.2397, 0);
+}*/
+/*
+PerspectiveCamera init_scene()
+{
+	std::vector<Object*>& vec = group.obj;
+	vec.push_back(new Sphere(Vector3f(0, 0, 0), 1,
+		new Material(Vector3f(1, 1, 0),
+			Vector3f(1, 1, 1), 0.4)));
+	vec.push_back(new Sphere(Vector3f(1, 1, 1), 0.75,
+		new Material(Vector3f(1, 1, 0),
+			Vector3f(1, 1, 1), 0.1)));
+	vec.push_back(new Sphere(Vector3f(-1, -1, 1), 0.75,
+		new Material(Vector3f(1, 1, 0),
+			Vector3f(1, 1, 1), 0.95)));
+	vec.push_back(new Sphere(Vector3f(-1, 1, -1), 0.75,
+		new Material(Vector3f(1, 1, 0),
+			Vector3f(1, 1, 1), 0.35)));
+	vec.push_back(new Sphere(Vector3f(1, -1, -1), 0.75,
+		new Material(Vector3f(1, 1, 0),
+			Vector3f(1, 1, 1), 0.35)));
+	vec.push_back(new Plane(Vector3f(0, 1, 0), -3,
+		new Material(Vector3f(0, 0, 1),
+			Vector3f(1, 1, 1), 0.35)));
+	group.reset_obj();
+	point_lights.push_back(new PointLight(Vector3f(0, 5, 5), Vector3f(0.9, 0.3, 0.3)));
+	point_lights.push_back(new PointLight(Vector3f(5, 0, 0), Vector3f(0.3, 0.9, 0.3)));
+	return PerspectiveCamera(Vector3f(0, 0, 10),
+		Vector3f(0, 0, -1),
+		Vector3f(0, 1, 0),
+		w, h, 1681.01, 0);
+}*/
+/*
+PerspectiveCamera init_scene()
+{
+	std::vector<Object*>& vec = group.obj;
+	vec.push_back(new Sphere(Vector3f(1, 0, 4), 1,
+		new Material(Vector3f(1, 1, 1),
+			Vector3f(1, 1, 1), 0.1)));
+	vec.push_back(new Sphere(Vector3f(-1, 0, 4), 1,
+		new Material(Vector3f(1, 1, 1),
+			Vector3f(1, 1, 1), 0.1)));
+	group.reset_obj();
+	point_lights.push_back(new PointLight(Vector3f(0, 5, 5), Vector3f(0.9, 0.3, 0.3)));
+	point_lights.push_back(new PointLight(Vector3f(5, 0, 0), Vector3f(0.3, 0.9, 0.3)));
+	return PerspectiveCamera(Vector3f(0, 0, 10),
+		Vector3f(0, 0, -1),
+		Vector3f(0, 1, 0),
+		w, h, 1681.01, 0);
+}*/
+#endif
