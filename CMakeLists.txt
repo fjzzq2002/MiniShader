@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 2.6)
 PROJECT(MiniShader)
+SET(CMAKE_CXX_FLAGS "-lpthread -O3 -march=native -mtune=native")
 INCLUDE_DIRECTORIES("${PROJECT_SOURCE_DIR}/asio-1.12.2/include")
 INCLUDE_DIRECTORIES("${PROJECT_SOURCE_DIR}")
 ADD_EXECUTABLE(MiniShader main.cpp image.cpp Matrix2f.cpp Matrix3f.cpp Matrix4f.cpp Quat4f.cpp Vector2f.cpp Vector3f.cpp Vector4f.cpp)
-SET(CMAKE_CXX_FLAGS "-O3 -march=native -mtune=native -DNDEBUG -lpthread")

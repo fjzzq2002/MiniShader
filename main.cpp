@@ -12,7 +12,7 @@
 #include <cmath>
 #include <ctime>
 #include <random>
-#include <thread>
+#include "ThreadPool.h"
 #include "sceneloader.h"
 Scene load_scene();
 Scene scene; int w, h;
@@ -52,7 +52,6 @@ inline void createCoordinateSystem(const Vector3f& N, Vector3f& Nt, Vector3f& Nb
 }
 
 int MAX_DEP;
-const int NUM_THREAD = 8;
 
 Vector3f tot[1000][1000];
 int cnt = 0;
@@ -85,154 +84,58 @@ inline Vector3f trace(T& g, Ray ray)
 		if (j >= MAX_DEP) break;
 		Vector3f hitp = ray.pos(hit.t);
 		Vector3f p0 = hit.norm, p1, p2;
-		/*
-		Vector3f np;
-		while (1)
-		{
-			//in the hemisphere of hit.norm
-			np[0] = randf(g) * 2 - 1;
-			np[1] = randf(g) * 2 - 1;
-			np[2] = randf(g) * 2 - 1;
-			if (Vector3f::dot(np, hit.norm) < 0) continue;
-			float d = np.squaredLength();
-			if (d > 0.01 && d < 0.98)
-			{
-				np *= 1 / sqrtf(d);
-				break;
-			}
-		}
-		*/
-		/*
 		createCoordinateSystem(p0, p1, p2);
-		float r1 = randf(g), r2 = randf(g);
-		float u = sqrtf(r1);
-		float p = 2 * PI * r2;
-		float y = u * cosf(p), z = u * sinf(p);
-		Vector3f np = sqrtf(1-r1) * p0 + y * p1 + z * p2;
-		coe = coe * hit.obj->m->BRDFE(ray.d, np, hit)/2;*/
-		createCoordinateSystem(p0, p1, p2);
-		/*
-		auto f = [&](float r1, float phi) {
-			float sinTheta = sqrtf(1 - r1 * r1);
-			float y = sinTheta * cosf(phi), z = sinTheta * sinf(phi);
-			Vector3f np = r1 * p0 + y * p1 + z * p2;
-			//diffuseColor*Vector3f::dot(np,hit.norm)
-			return hit.obj->m->BRDF(ray.d, np, hit);
-		};
-		//lambert only
-		auto L0 = [&](float r1, float phi) {
-			return r1;
-		};
-		auto L2 = [&](float r1, float r2) {
-			return r1 * r2;
-		};
-		auto L1 = [&](float r1, float r2) {
-			return r1*r1/2 * r2;
-		};*/
-		/*
-		float t1 = randf(g), phi = randf(g) * PI * 2, r1= sqrtf(t1);
-		Vector3f np = r1 * p0 +
-			(cosf(phi) * p1 + sinf(phi) * p2) * sqrtf(1 - t1);
-		coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / r1 * 0.5;
-		ray = Ray(hitp, np);*/
 		float r = hit.obj->m->roughness;
 		if(typ)
 		{
-			float r1 = sqrtf(randf(g)), phi = randf(g) * PI * 2;
-			float sinTheta = sqrtf(1 - r1 * r1);
+			float C = sqrtf(randf(g)), phi = randf(g) * PI * 2;
+			float sinTheta = sqrtf(1 - C * C);
 			float y = sinTheta * cosf(phi), z = sinTheta * sinf(phi);
-			Vector3f np = r1 * p0 + y * p1 + z * p2;
-			float C = r1;
+			Vector3f np = C * p0 + y * p1 + z * p2;
 			Vector3f H = np - ray.d; H.normalize();
 			float NH = Vector3f::dot(H, p0);
 			float nhh = NH * NH;
 			float D = expf((nhh - 1) / (r * r * nhh)) / (r * r * nhh * nhh);
-//			std::cerr << "HELLO " << D << std::endl;
 			if (D < 0) D = 0;
-			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / r1 / 2 *((C * C) / (C * C + D * D)) * 2;
+			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / C / 2 *((C * C) / (C * C + D * D)) * 2;
 			ray = Ray(hitp, np);
 		}
 		else
 		{
-			/*
-			//		std::cerr << L << "," << R << "?\n";
-			float u = randf(g) * (1 + e);
-			float M = 0.5;
-			for (int j = 1; j <= 10; ++j)
-			{
-				float E = expf((1 - 1 / M / M) / r / r);
-				float F = 1 - E + e * (1 - M) - u;
-				if (F<1e-4 && F>-1e-4) break;
-				float D = -e - E * 2 / r / r / M / M / M;
-				M = M - F / D;
-				if (M < 0) M = 0;
-				if (M > 1) M = 1;
-//				std::cerr << F << "," << D << " " << j << "   "<<u<<"\n";
-			}
-			float co = M;
-//			float co = sqrtf(1 / (1 - r * r * logf(1 - u)));// +u * 2 * PI * e;
+			float u = randf(g);
+			float co = sqrtf(1 / (1 - r * r * logf(1 - u)));
 			float nhh = co * co;
-			//0,1/(r*r)
-			float D = expf((nhh - 1) / (r * r * nhh)) / (r * r * nhh * nhh) + e;
-			float phi = randf(g)*2*PI, g = sqrtf(1 - co * co);
-			Vector3f H = p0 * co + (p1 * cosf(phi) + p2 * sinf(phi)) * g;
-			//		std::cerr << Vector3f::dot(p0, H) << " " << co << "   "<<L<<","<<R<<","<<u<<"  "<<r<<"\n";
-			Vector3f np = H * 2 + ray.d; np.normalize();
-			float C = Vector3f::dot(p0, np); if (C < 0) C = 0;
-			//		std::cerr << Vector3f::dot(p0, np) << " " << co << "!!\n";
-			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / D * (1 + e) *((D* D * r * r * r * r) / (C * C + D * D * r * r * r * r)) * 2;
-			ray = Ray(hitp, np);*/
-			float u = randf(g);// *(1 + e);
-			/*
-			float M = 0.5;
-			for (int j = 1; j <= 10; ++j)
-			{
-				float E = expf((1 - 1 / M / M) / r / r);
-				float F = 1 - E + e * (1 - M) - u;
-				if (F<1e-4 && F>-1e-4) break;
-				float D = -e - E * 2 / r / r / M / M / M;
-				M = M - F / D;
-				if (M < 0) M = 0;
-				if (M > 1) M = 1;
-				//				std::cerr << F << "," << D << " " << j << "   "<<u<<"\n";
-			}
-			float co = M;*/
-			float co = sqrtf(1 / (1 - r * r * logf(1 - u)));// +u * 2 * PI * e;
-			float nhh = co * co;
-			//0,1/(r*r)
 			float D = expf((nhh - 1) / (r * r * nhh)) / (r * r * nhh * nhh);
 			float phi = randf(g) * 2 * PI, g = sqrtf(1 - co * co);
 			Vector3f H = p0 * co + (p1 * cosf(phi) + p2 * sinf(phi)) * g;
-			//		std::cerr << Vector3f::dot(p0, H) << " " << co << "   "<<L<<","<<R<<","<<u<<"  "<<r<<"\n";
 			Vector3f np = H * 2 + ray.d; np.normalize();
 			float C = Vector3f::dot(p0, np); if (C < 0) C = 0;
-			//		std::cerr << Vector3f::dot(p0, np) << " " << co << "!!\n";
 			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / D * ((D * D) / (C * C + D * D)) * 2;
 			ray = Ray(hitp, np);
 		}
 	}
 	return col;
 }
-void execute(const PerspectiveCamera& camera, int tid)
+bool execute(const PerspectiveCamera& camera, int x)
 {
-	static unsigned cnt[100];
-	std::minstd_rand0 g((cnt[tid] += 100) + tid);
-	for (int x = int(camera.getWidth() - tid); x >= 0; x -= NUM_THREAD)
+	static unsigned cnt[1000];
+	std::minstd_rand0 g((cnt[x] += camera.getWidth()) + x);
+	for (int y = int(camera.getHeight() - 1); y >= 0; --y)
 	{
-		for (int y = int(camera.getHeight() - 1); y >= 0; --y)
-		{
-			Ray camRay = camera.generateRay(Vector2f(x - randf(g) + 0.5, y - randf(g) + 0.5));
-			Vector3f col = trace(g, camRay);
-			auto clamp = [&](float x) {if (x > 1000) x = 1000; return x; };
-			col[0] = clamp(col[0]);
-			col[1] = clamp(col[1]);
-			col[2] = clamp(col[2]);
-			tot[x][y] += col;
-		}
+		Ray camRay = camera.generateRay(Vector2f(x - randf(g) + 0.5, y - randf(g) + 0.5));
+		Vector3f col = trace(g, camRay);
+		auto clamp = [&](float x) {if (x > 1000) x = 1000; return x; };
+		col[0] = clamp(col[0]);
+		col[1] = clamp(col[1]);
+		col[2] = clamp(col[2]);
+		tot[x][y] += col;
 	}
+	return 1;
 }
 
 Vector3f tx[1005][1005],tg[1005][1005],tu[1005][1005];
+
+ThreadPool *pool;
 
 bool SILENT,NOSAVE;
 void reshade(Vector3f o, Vector3f d, Vector3f u, float x, bool keep)
@@ -245,15 +148,16 @@ void reshade(Vector3f o, Vector3f d, Vector3f u, float x, bool keep)
 	for (int x = 0; x < camera.getWidth(); ++x)
 		for (int y = 0; y < camera.getHeight(); ++y)
 			tot[x][y] = Vector3f::ZERO;
+	for (int x = 0; x < camera.getWidth(); ++x)
 	if (!keep)
 		for (int x = 0; x < camera.getWidth(); ++x)
 			for (int y = 0; y < camera.getHeight(); ++y)
-				tx[x][y] = tu[x][y]=Vector3f::ZERO;
-	std::thread* tr[NUM_THREAD];
-	for (int u = 1; u <= NUM_THREAD; ++u)
-		tr[u - 1] = new std::thread(execute, camera, u);
-	for (int u = 1; u <= NUM_THREAD; ++u) tr[u - 1]->join();
-	const float coe[] = { 1 / 16.0,1 / 4.0,3 / 8.0,1 / 4.0,1 / 16.0 };
+				tx[x][y] = Vector3f::ZERO;
+	std::vector<std::future<bool>> v(camera.getWidth());
+	for (int x = 0; x < camera.getWidth(); ++x)
+		v[x]=pool->enqueue(execute, camera, x);
+	for (int x = 0; x < camera.getWidth(); ++x) v[x].get();
+	//todo: denoise?
 	for (int x = 0; x < camera.getWidth(); ++x)
 		for (int y = 0; y < camera.getHeight(); ++y)
 		{
@@ -274,11 +178,15 @@ int main(int argc,char**argv)
 	load_scene(scene);
 	w = scene.camera->width;
 	h = scene.camera->height;
-	std::cout << "MAX_DEP: ";
+	std::cout << "max depth: ";
 	std::cin >> MAX_DEP;
-    std::cout << "TARGET PPM (<=0 for server): ";
+    std::cout << "ppm (<=0 for server): ";
     int ppm;
     std::cin>>ppm;
+	std::cout << "no. of threads: ";
+	int ns;
+	std::cin >> ns;
+	pool = new ThreadPool(ns);
     if(ppm<=0)
     {
         std::string cam_pos = to_str(*scene.camera);
@@ -291,7 +199,7 @@ int main(int argc,char**argv)
         time_t tl=clock();
         for(int j=0;j<ppm;++j)
         {
-            std::cerr<<"frame "<<j<<std::endl; SILENT=1;
+            std::cerr<<"frame "<<j<<std::endl;// SILENT=1;
 			if (clock() - tl > CLOCKS_PER_SEC * 3||j==ppm-1)
 			{
 				tl = clock();
@@ -301,6 +209,6 @@ int main(int argc,char**argv)
 			else NOSAVE = 1;
 			reshade(scene.camera->center,scene.camera->direction,scene.camera->up,scene.camera->dist,(j!=0));
         }
-        std::cerr<<"Done. Used "<<clock()*1.0/CLOCKS_PER_SEC<<"s\n";
+        std::cerr<<"done. used "<<clock()*1.0/CLOCKS_PER_SEC<<"s\n";
     }
 }
