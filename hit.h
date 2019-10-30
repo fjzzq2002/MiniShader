@@ -1,7 +1,7 @@
 #ifndef HIT_H
 #define HIT_H
 #include <cassert>
-#include "vecmath.h"
+#include "utils.h"
 #include <limits>
 class Object;
 class Hit {

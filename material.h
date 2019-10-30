@@ -1,7 +1,7 @@
 #ifndef MATERIAL_H
 #define MATERIAL_H
 #include <algorithm>
-#include "vecmath.h"
+#include "utils.h"
 #include "ray.h"
 #include "hit.h"
 #include "light.h"

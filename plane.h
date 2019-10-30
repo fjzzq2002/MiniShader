@@ -1,7 +1,7 @@
 #ifndef PLANE_H
 #define PLANE_H
 #include <cassert>
-#include "vecmath.h"
+#include "utils.h"
 #include <limits>
 #include "object.h"
 #include "ray.h"

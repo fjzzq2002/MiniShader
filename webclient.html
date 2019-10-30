@@ -1,0 +1,290 @@
+<html>
+<head>
+<title>Minishader Client</title>
+<meta charset="utf-8">
+<!--
+<link rel="stylesheet" href="https://cdn.staticfile.org/twitter-bootstrap/3.3.7/css/bootstrap.min.css">
+<script src="https://cdn.staticfile.org/jquery/2.1.1/jquery.min.js"></script>
+<script src="https://cdn.staticfile.org/twitter-bootstrap/3.3.7/js/bootstrap.min.js"></script>
+<link href="https://cdn.bootcss.com/font-awesome/5.11.2/css/all.min.css" rel="stylesheet">
+-->
+<script src="webclient-dependency/jquery-2.2.4.min.js"></script>
+<link rel="stylesheet" href="webclient-dependency/bootstrap-3.3.7-dist/css/bootstrap.min.css">
+<script src="webclient-dependency/bootstrap-3.3.7-dist/js/bootstrap.min.js"></script>
+<link href="webclient-dependency/fontawesome-free-5.11.2-web/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+<div style="margin-left: 20px">
+<div class="page-header" style="margin-bottom:10px">
+<h1>Minishader Client
+<small><button data-toggle="collapse" data-target="#menu" class="btn btn-link"><span id="status" style="color:red">
+<i class="fas fa-cogs"></i></span></button></small>
+</h1>
+</div>
+<div>
+<div id="menu" class="collapse">
+Avaliable Parameters: <span id="params"></span><br>
+Avaliable Modules: <span id="modules"></span>
+<div style="overflow:hidden;height:20px;"><span id="raw_param"></span></div>
+</div>
+<img src="" border="1" id="imgdisplay"></p>
+</div>
+</div>
+<script type="text/javascript">
+var isup=0,curkey=0,angle_per=Math.PI/120,scale_per=0.95,step_per=0.3,updated=0;
+function reload()
+{
+    $('#imgdisplay').attr('src','output.bmp?'+Math.random());
+    $('#imgdisplay').attr('width',current_param['client_width']);
+    $('#imgdisplay').attr('height',current_param['client_height']);
+}
+function routine()
+{
+    $('#raw_param')[0].innerHTML=JSON.stringify(current_param);
+    if(!isup) $('#status').css('color','red');
+    else $('#status').css('color','green');
+    setTimeout("routine();",100);
+}
+var current_param;
+function key(k)
+{
+    return '<span style="border: 1px solid;">&nbsp;'+k+'&nbsp;</span>';
+}
+function prettify_param(t)
+{
+    t=t.replace('camera_','<i class="fas fa-camera"></i>');
+    t=t.replace('image_','<i class="fas fa-image"></i>');
+    t=t.replace('client_','<i class="fas fa-search"></i>');
+    return t;
+}
+function cross(a,b)
+{
+    return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+}
+function add(a,b)
+{
+    return [a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+}
+function mul(a,x)
+{
+    return [a[0]*x,a[1]*x,a[2]*x];
+}
+function rturn(ang)
+{
+    //rotate(direction,horiztonal)
+    current_param['camera_direction']=add(
+        mul(current_param['camera_horizontal'],Math.cos(ang+Math.PI/2)),
+        mul(current_param['camera_direction'],Math.sin(ang+Math.PI/2)));
+    current_param['camera_horizontal']=cross(current_param['camera_direction'],current_param['camera_up']);
+}
+function dturn(ang)
+{
+    [current_param['camera_up'],current_param['camera_direction']]
+    =[add(mul(current_param['camera_up'],Math.cos(ang)),mul(current_param['camera_direction'],Math.sin(ang))),
+    add(mul(current_param['camera_up'],Math.cos(ang+Math.PI/2)),mul(current_param['camera_direction'],Math.sin(ang+Math.PI/2)))];
+    current_param['camera_horizontal']=cross(current_param['camera_direction'],current_param['camera_up']);
+}
+var on_event=[],on_key=[];
+function deal_key(c)
+{
+    if(curkey&(1<<c));else return;
+    for(var p in on_key)
+        if(document.getElementById(on_key[p][0]).checked) on_key[p][1](c);
+    setTimeout(function(){deal_key(c);},current_param['client_sensitivity']);
+}
+function manual_edit(s)
+{
+    var g=current_param[s],d='scalar';
+    if(g.length!=null) d='vector';
+    var h=prompt('Editing '+d+' '+s+"\n(don't edit unless you know what you're doing!)",JSON.stringify(g));
+    if(h==null) return;
+    h=JSON.parse(h);
+    if(h.length!=g.length)
+    {
+        alert('invalid edit');
+        return;
+    }
+    if(current_param[s]==h) return;
+    current_param[s]=h;
+    console.log('update',s);
+    if(s.substr(0,7)=="client_") return;
+    updated=1;
+}
+function camera_movement(c)
+{
+    if(c==8) //I
+        dturn(-angle_per*current_param['client_speed']);
+    else if(c==10) //K
+        dturn(angle_per*current_param['client_speed']);
+    else if(c==9) //J
+        rturn(angle_per*current_param['client_speed']);
+    else if(c==11) //L
+        rturn(-angle_per*current_param['client_speed']);
+    else if(c==22) //W
+        current_param['camera_center']=add(current_param['camera_center'],
+        mul(current_param['camera_direction'],step_per*current_param['client_speed']));
+    else if(c==18) //S
+        current_param['camera_center']=add(current_param['camera_center'],
+        mul(current_param['camera_direction'],-step_per*current_param['client_speed']));
+    else if(c==0) //A
+        current_param['camera_center']=add(current_param['camera_center'],
+        mul(current_param['camera_horizontal'],-step_per*current_param['client_speed']));
+    else if(c==3) //D
+        current_param['camera_center']=add(current_param['camera_center'],
+        mul(current_param['camera_horizontal'],step_per*current_param['client_speed']));
+    else if(c==17) //R
+        current_param['camera_center']=add(current_param['camera_center'],
+        mul(current_param['camera_up'],step_per*current_param['client_speed']));
+    else if(c==5) //F
+        current_param['camera_center']=add(current_param['camera_center'],
+        mul(current_param['camera_up'],-step_per*current_param['client_speed']));
+    else return;
+    console.log(c);
+    updated=1;
+}
+function camera_distance_zoom(c)
+{
+    if(c==14) //O
+        current_param['camera_dist']*=Math.pow(scale_per,current_param['client_speed']);
+    else if(c==15) //P
+        current_param['camera_dist']/=Math.pow(scale_per,current_param['client_speed']);
+    else return;
+    console.log(c);
+    updated=1;
+}
+function camera_focus_zoom(c)
+{
+    if(c==19) //T
+        current_param['camera_length']*=Math.pow(scale_per,current_param['client_speed']);
+    else if(c==24) //Y
+        current_param['camera_length']/=Math.pow(scale_per,current_param['client_speed']);
+    else return;
+    console.log(c);
+    updated=1;
+}
+function camera_radius_zoom(c)
+{
+    if(c==6) //G
+        current_param['camera_radius']*=Math.pow(scale_per,current_param['client_speed']);
+    else if(c==7) //H
+        current_param['camera_radius']/=Math.pow(scale_per,current_param['client_speed']);
+    else return;
+    console.log(c);
+    updated=1;
+}
+function speed_adjust()
+{
+    var k=0.6;
+    if(curkey&(1<<25)) k*=4; //Z
+    if(curkey&(1<<23)) k*=2; //X
+    if(curkey&(1<<13)) k/=2; //N
+    if(curkey&(1<<12)) k/=4; //M
+    current_param['client_speed']=k;
+}
+function add_module(name,params,keys,help,f1,f2,checked=0)
+{
+    for(var t in params)
+        if(current_param[params[t]]==null)
+            return;
+    var gx='checkbox'+Math.random();
+    gx=gx.replace('.','');
+    if(f1!=null) on_key.push([gx,f1]);
+    if(f2!=null) on_event.push([gx,f2]);
+    var info='<div class="checkbox"><label><input id="'+gx+'" type="checkbox" '+(checked?'checked':'')+'>'+name+'&nbsp;</label>';
+    if(help!='')
+        info+='<i class="fas fa-info-circle" onclick="javascript:alert(\''+help+'\')"></i>&nbsp;';
+    for(var t in keys)
+        info+=key(keys[t]);
+    for(var t in params)
+        info+='&nbsp;'+prettify_param(params[t]);
+    info+='</div>';
+    $('#modules')[0].innerHTML+=info;
+}
+function add_modules()
+{
+    $('#modules')[0].innerHTML='';
+    add_module('camera movement',['camera_center','camera_direction','camera_up','camera_horizontal'],
+    ['W','A','S','D','R','F','I','J','K','L'],'press WASDRF to move camera position (forward, leftward, backward, rightward, upward, downward), IJKL to move camera window (upword, leftward, downward, rightward)',camera_movement,null,1);
+    add_module('camera distance zoom',['camera_dist'],['O','P'],'press O to make view window bigger (objects smaller), P to make view window smaller (objects bigger)',camera_distance_zoom,null,1);
+    add_module('camera focus length zoom',['camera_length'],['T','Y'],'press T to make camera focus length smaller, Y to make camera focus length bigger',camera_focus_zoom,null,1);
+    add_module('camera radius zoom',['camera_radius'],['G','H'],'press G to make camera radius smaller, H to make camera radius bigger',camera_radius_zoom,null,1);
+    add_module('speed adjust',['client_speed'],['Z','X','N','M'],'press Z for 4x boost, X for 2x boost, N for 2x slowdown, M for 4x slowdown',null,speed_adjust,1);
+}
+$(document).ready(function(){
+    routine();
+    $(document).keypress(function(e){
+        var code=e.which;
+        if(code>=97) code=code-97+65;
+        code-=65;
+        if(code>=0&&code<26);else return;
+        if(curkey&(1<<code)) return;
+        curkey|=1<<code;
+        for(var p in on_event)
+            if(document.getElementById(on_event[p][0]).checked)
+                on_event[p][1]();
+        deal_key(code);
+    });
+    $(document).keyup(function(e){
+        var code=e.which-65;
+        if(code>=0&&code<26);else return;
+        curkey&=~(1<<code);
+        for(var p in on_event)
+            if(document.getElementById(on_event[p][0]).checked)
+                on_event[p][1]();
+    });
+    if(!("WebSocket" in window)) alert('WebSocket not supported!');
+    function connect() {
+        isup=0;
+        ws = new WebSocket("ws://localhost:9002");
+        ws.onopen = function()
+        {
+            isup=1; shading=0;
+            console.log('connected');
+            ws.send(JSON.stringify({'type':'query'}));
+        };
+        ws.onmessage = function(evt)
+        {
+            console.log('received new message',evt.data);
+            var msg=JSON.parse(evt.data);
+            if(msg["type"]=="query")
+            {
+                rs=[];
+                current_param=msg["result"];
+                //client properties
+                current_param.client_speed=0.6;
+                current_param.client_width=800;
+                current_param.client_height=800;
+                current_param.client_sensitivity=50;
+                for(var s in current_param)
+                    rs.push('<a href="javascript:manual_edit(\''+s+'\');">'+prettify_param(s)+'</a>');
+                $('#params')[0].innerHTML=rs.join(',');
+                add_modules();
+            }
+            else if(msg["type"]=="shade")
+            {
+                console.log('shade result:',msg["result"]);
+            }
+            else if(msg["type"]=="edit_parameters")
+            {
+                console.log('edited',msg["result"],'parameters');
+            }
+            if(updated)
+            {
+                updated=0;
+                ws.send(JSON.stringify({'type':'edit_parameters','param':current_param}));
+            }
+            else
+                ws.send(JSON.stringify({'type':'shade'}));
+            reload();
+        };
+        ws.onclose=function()
+        {
+            console.log('disconnected!!'); isup=0; shading=0;
+            setTimeout(function() {connect();},1000);
+        };
+    }
+    connect();
+});
+</script>
+</body>
+</html>

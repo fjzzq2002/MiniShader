@@ -2,7 +2,7 @@
 #define RAY_H
 
 #include <cassert>
-#include "vecmath.h"
+#include "utils.h"
 #include <limits>
 
 class Ray {

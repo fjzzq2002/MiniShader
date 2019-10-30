@@ -1,7 +1,7 @@
 #ifndef GROUP_H
 #define GROUP_H
 #include <cassert>
-#include "vecmath.h"
+#include "utils.h"
 #include "ray.h"
 #include "object.h"
 #include <iostream>

@@ -1,7 +1,7 @@
 #ifndef SCENE_H
 #define SCENE_H
 
-#include "vecmath.h"
+#include "utils.h"
 #include <vector>
 #include "group.h"
 #include "light.h"
@@ -11,7 +11,7 @@
 struct Scene {
 	Group group;
 	std::vector<PointLight*> point_lights;
-	PerspectiveCamera* camera;
+	Camera* camera;
 	Scene() {}
 };
 #endif

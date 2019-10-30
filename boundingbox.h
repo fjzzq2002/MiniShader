@@ -1,7 +1,7 @@
 #ifndef BOUNDINGBOX_H
 #define BOUNDINGBOX_H
 
-#include "vecmath.h"
+#include "utils.h"
 #include <cmath>
 #include "ray.h"
 

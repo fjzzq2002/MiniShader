@@ -1,2 +1,4 @@
-VSBuild/ 
+VSBuild/
 Build/
+output.bmp
+scenes/scene.json

@@ -1,7 +1,7 @@
 #ifndef LIGHT_H
 #define LIGHT_H
 
-#include "vecmath.h"
+#include "utils.h"
 
 struct PointLight
 {

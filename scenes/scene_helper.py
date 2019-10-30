@@ -31,6 +31,16 @@ class PerspectiveCamera():
         self.h=h
         self.f=f
         self.b=b
+class ThinLensCamera():
+    def __init__(self,o,d,u,w,h,f,l,r):
+        self.o=o
+        self.d=d
+        self.u=u
+        self.w=w
+        self.h=h
+        self.f=f
+        self.l=l
+        self.r=r
 class PointLight():
     def __init__(self,o,c):
         self.o=o
@@ -38,7 +48,7 @@ class PointLight():
 def obj_2_json(obj):
     if isinstance(obj,Material):
         return {
-            "class": "Material",
+            "type": "Material",
             "dc": obj.dc,
             "sc": obj.sc,
             "r": obj.r,
@@ -46,14 +56,14 @@ def obj_2_json(obj):
         }
     if isinstance(obj,Plane):
         return {
-            "class": "Plane",
+            "type": "Plane",
             "k": obj.k,
             "c": obj.c,
             "m": obj.m
         }
     if isinstance(obj,PerspectiveCamera):
         return {
-            "class": "PerspectiveCamera",
+            "type": "PerspectiveCamera",
             "o": obj.o,
             "d": obj.d,
             "u": obj.u,
@@ -62,16 +72,28 @@ def obj_2_json(obj):
             "f": obj.f,
             "b": obj.b
         }
+    if isinstance(obj,ThinLensCamera):
+        return {
+            "type": "ThinLensCamera",
+            "o": obj.o,
+            "d": obj.d,
+            "u": obj.u,
+            "w": obj.w,
+            "h": obj.h,
+            "f": obj.f,
+            "l": obj.l,
+            "r": obj.r
+        }
     if isinstance(obj,Sphere):
         return {
-            "class": "Sphere",
+            "type": "Sphere",
             "o": obj.o,
             "r": obj.r,
             "m": obj.m
         }
     if isinstance(obj,Triangle):
         return {
-            "class": "Triangle",
+            "type": "Triangle",
             "a": obj.a,
             "b": obj.b,
             "c": obj.c,
@@ -79,7 +101,7 @@ def obj_2_json(obj):
         }
     if isinstance(obj,PointLight):
         return {
-            "class": "PointLight",
+            "type": "PointLight",
             "o": obj.o,
             "c": obj.c
         }

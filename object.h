@@ -2,7 +2,7 @@
 #define OBJECT_H
 
 #include <cassert>
-#include "vecmath.h"
+#include "utils.h"
 #include <limits>
 #include "material.h"
 #include "boundingbox.h"

@@ -1,7 +1,7 @@
 #ifndef TRIANGLE_H
 #define TRIANGLE_H
 #include <cassert>
-#include "vecmath.h"
+#include "utils.h"
 #include <limits>
 #include "object.h"
 #include "ray.h"

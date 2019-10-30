@@ -16,31 +16,6 @@
 #include "sceneloader.h"
 Scene load_scene();
 Scene scene; int w, h;
-std::string to_str(const PerspectiveCamera& cam)
-{
-	std::vector<float> vec;
-	vec.push_back(cam.center[0]);
-	vec.push_back(cam.center[1]);
-	vec.push_back(cam.center[2]);
-	vec.push_back(cam.direction[0]);
-	vec.push_back(cam.direction[1]);
-	vec.push_back(cam.direction[2]);
-	vec.push_back(cam.up[0]);
-	vec.push_back(cam.up[1]);
-	vec.push_back(cam.up[2]);
-	vec.push_back(cam.dist);
-	std::string out = "init ";
-	for (auto v : vec)
-		out += std::to_string(v) + ",";
-	out.pop_back();
-	return out;
-}
-
-template<class T>
-inline float randf(T& g)
-{
-	return double(g() - g.min()) / (g.max() - g.min());
-}
 
 inline void createCoordinateSystem(const Vector3f& N, Vector3f& Nt, Vector3f& Nb)
 {
@@ -56,11 +31,13 @@ int MAX_DEP;
 Vector3f tot[1000][1000];
 int cnt = 0;
 
-template<class T>
-inline Vector3f trace(T& g, Ray ray)
+#define NO_MIS
+inline Vector3f trace(RNG_TYPE& g, Ray ray)
 {
 	Vector3f col(0, 0, 0), coe(1, 1, 1);
+#ifndef NO_MIS
 	bool typ = g() % 2 == 0;
+#endif
 	for (int j = 0; ; ++j)
 	{
 		Hit hit;
@@ -86,6 +63,7 @@ inline Vector3f trace(T& g, Ray ray)
 		Vector3f p0 = hit.norm, p1, p2;
 		createCoordinateSystem(p0, p1, p2);
 		float r = hit.obj->m->roughness;
+#ifndef NO_MIS
 		if(typ)
 		{
 			float C = sqrtf(randf(g)), phi = randf(g) * PI * 2;
@@ -113,17 +91,25 @@ inline Vector3f trace(T& g, Ray ray)
 			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / D * ((D * D) / (C * C + D * D)) * 2;
 			ray = Ray(hitp, np);
 		}
+#else
+		float C = sqrtf(randf(g)), phi = randf(g) * PI * 2;
+		float sinTheta = sqrtf(1 - C * C);
+		float y = sinTheta * cosf(phi), z = sinTheta * sinf(phi);
+		Vector3f np = C * p0 + y * p1 + z * p2;
+		coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / C / 2;
+		ray = Ray(hitp, np);
+#endif
 	}
 	return col;
 }
-bool execute(const PerspectiveCamera& camera, int x)
+bool execute(Camera* camera, int x)
 {
-	static unsigned cnt[1000];
-	std::minstd_rand0 g((cnt[x] += camera.getWidth()) + x);
-	for (int y = int(camera.getHeight() - 1); y >= 0; --y)
+	static RNG_TYPE* rng[1000];
+	if (!rng[x]) rng[x] = new RNG_TYPE(x);
+	for (int y = int(camera->getHeight() - 1); y >= 0; --y)
 	{
-		Ray camRay = camera.generateRay(Vector2f(x - randf(g) + 0.5, y - randf(g) + 0.5));
-		Vector3f col = trace(g, camRay);
+		Ray camRay = camera->generateRay(x, y, *rng[x]);
+		Vector3f col = trace(*rng[x], camRay);
 		auto clamp = [&](float x) {if (x > 1000) x = 1000; return x; };
 		col[0] = clamp(col[0]);
 		col[1] = clamp(col[1]);
@@ -133,45 +119,30 @@ bool execute(const PerspectiveCamera& camera, int x)
 	return 1;
 }
 
-Vector3f tx[1005][1005],tg[1005][1005],tu[1005][1005];
-
 ThreadPool *pool;
 
-bool SILENT,NOSAVE;
-void reshade(Vector3f o, Vector3f d, Vector3f u, float x, bool keep)
+void reshade(bool keep)
 {
 	if (!keep) cnt = 1; else ++cnt;
-	if(!SILENT) std::cerr << "shading start (" << keep << "," << cnt << ")" << std::endl;
+	Camera* camera = scene.camera;
+	std::cerr << "shading start (" << keep << "," << cnt << ")" << std::endl;
 	time_t t1 = clock();
-	PerspectiveCamera camera(o, d, u, w, h, x, 0);
-	Image renderedImg(camera.getWidth(), camera.getHeight());
-	for (int x = 0; x < camera.getWidth(); ++x)
-		for (int y = 0; y < camera.getHeight(); ++y)
-			tot[x][y] = Vector3f::ZERO;
-	for (int x = 0; x < camera.getWidth(); ++x)
+	Image renderedImg(camera->getWidth(), camera->getHeight());
 	if (!keep)
-		for (int x = 0; x < camera.getWidth(); ++x)
-			for (int y = 0; y < camera.getHeight(); ++y)
-				tx[x][y] = Vector3f::ZERO;
-	std::vector<std::future<bool>> v(camera.getWidth());
-	for (int x = 0; x < camera.getWidth(); ++x)
+		for (int x = 0; x < camera->getWidth(); ++x)
+			for (int y = 0; y < camera->getHeight(); ++y)
+				tot[x][y] = Vector3f::ZERO;
+	std::vector<std::future<bool>> v(camera->getWidth());
+	for (int x = 0; x < camera->getWidth(); ++x)
 		v[x]=pool->enqueue(execute, camera, x);
-	for (int x = 0; x < camera.getWidth(); ++x) v[x].get();
-	//todo: denoise?
-	for (int x = 0; x < camera.getWidth(); ++x)
-		for (int y = 0; y < camera.getHeight(); ++y)
-		{
-			for(int k=0;k<3;++k)
-				if (tot[x][y][k] > 20) tot[x][y][k] = 20;
-			tx[x][y] += tot[x][y];
-		}
-	for (int x = 0; x < camera.getWidth(); ++x)
-		for (int y = 0; y < camera.getHeight(); ++y)
-			renderedImg.SetPixel(x, camera.getHeight() - 1 - y, tx[x][y]/cnt);
+	for (int x = 0; x < camera->getWidth(); ++x) v[x].get();
+	for (int x = 0; x < camera->getWidth(); ++x)
+		for (int y = 0; y < camera->getHeight(); ++y)
+			renderedImg.SetPixel(x, camera->getHeight() - 1 - y, tot[x][y]/cnt);
 	time_t t2 = clock();
-	if(!NOSAVE) renderedImg.SaveBMP("test.bmp");
-	if(!SILENT) std::cerr << "end shading " << (t2 - t1) * 1.0 / CLOCKS_PER_SEC << "s    " << 1.0 / ((t2 - t1) * 1.0 / CLOCKS_PER_SEC) << "fps\n";
-	if(!SILENT) std::cerr << "time passed: " << t2 * 1.0 / CLOCKS_PER_SEC << "s\n";
+	renderedImg.SaveBMP("output.bmp");
+	std::cerr << "end shading " << (t2 - t1) * 1.0 / CLOCKS_PER_SEC << "s    " << 1.0 / ((t2 - t1) * 1.0 / CLOCKS_PER_SEC) << "fps\n";
+	std::cerr << "time passed: " << t2 * 1.0 / CLOCKS_PER_SEC << "s\n";
 }
 int main(int argc,char**argv)
 {
@@ -180,7 +151,7 @@ int main(int argc,char**argv)
 	h = scene.camera->height;
 	std::cout << "max depth: ";
 	std::cin >> MAX_DEP;
-    std::cout << "ppm (<=0 for server): ";
+    std::cout << "ppm (0 for server, >0 for rendering only): ";
     int ppm;
     std::cin>>ppm;
 	std::cout << "no. of threads: ";
@@ -189,9 +160,9 @@ int main(int argc,char**argv)
 	pool = new ThreadPool(ns);
     if(ppm<=0)
     {
-        std::string cam_pos = to_str(*scene.camera);
-        std::cerr << cam_pos << "\n";
-        Server server(reshade, cam_pos);
+		PARAMLIST_TYPE param_list;
+		scene.camera->dump(param_list);
+        Server server(reshade, param_list);
     	server.run();
     }
     else
@@ -199,15 +170,8 @@ int main(int argc,char**argv)
         time_t tl=clock();
         for(int j=0;j<ppm;++j)
         {
-            std::cerr<<"frame "<<j<<std::endl;// SILENT=1;
-			if (clock() - tl > CLOCKS_PER_SEC * 3||j==ppm-1)
-			{
-				tl = clock();
-				std::cerr << "saving\n";
-				NOSAVE = 0;
-			}
-			else NOSAVE = 1;
-			reshade(scene.camera->center,scene.camera->direction,scene.camera->up,scene.camera->dist,(j!=0));
+            std::cerr<<"frame "<<j<<std::endl;
+			reshade(j!=0);
         }
         std::cerr<<"done. used "<<clock()*1.0/CLOCKS_PER_SEC<<"s\n";
     }

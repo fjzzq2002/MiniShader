@@ -24,10 +24,15 @@ Vector3f json_to_v3(const T& c)
 	return Vector3f(c[0], c[1], c[2]);
 }
 template<class T>
-PerspectiveCamera* json_parse_camera(const T& c)
+Camera* json_parse_camera(const T& c)
 {
-	return new PerspectiveCamera(json_to_v3(c["o"]), json_to_v3(c["d"]), json_to_v3(c["u"]),
-		c["w"], c["h"], c["f"], c["b"]);
+	if(c["type"]=="PerspectiveCamera")
+		return new PerspectiveCamera(json_to_v3(c["o"]), json_to_v3(c["d"]), json_to_v3(c["u"]),
+			c["w"], c["h"], c["f"], c["b"]);
+	if(c["type"]=="ThinLensCamera")
+		return new ThinLensCamera(json_to_v3(c["o"]), json_to_v3(c["d"]), json_to_v3(c["u"]),
+			c["w"], c["h"], c["f"], c["l"], c["r"]);
+	return 0;
 }
 template<class T>
 Material* json_parse_material(const T& c)
@@ -46,12 +51,12 @@ PointLight* json_parse_light(const T& c)
 template<class T>
 Object* json_parse_object(const T& c)
 {
-	std::cerr << c["class"] << std::endl;
-	if (c["class"] == "Plane")
+	std::cerr << c["type"] << std::endl;
+	if (c["type"] == "Plane")
 		return new Plane(json_to_v3(c["k"]), c["c"], json_parse_material(c["m"]));
-	if (c["class"] == "Sphere")
+	if (c["type"] == "Sphere")
 		return new Sphere(json_to_v3(c["o"]), c["r"], json_parse_material(c["m"]));
-	if (c["class"] == "Triangle")
+	if (c["type"] == "Triangle")
 		return new Triangle(json_to_v3(c["a"]),
 			json_to_v3(c["b"]), json_to_v3(c["c"]), json_parse_material(c["m"]));
 	throw "invalid object";

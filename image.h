@@ -2,7 +2,7 @@
 #define IMAGE_H
 
 #include <cassert>
-#include "vecmath.h"
+#include "Vector3f.h"
 
 // Simple image class
 class Image {
