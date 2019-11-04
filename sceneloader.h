@@ -51,7 +51,7 @@ PointLight* json_parse_light(const T& c)
 template<class T>
 Object* json_parse_object(const T& c)
 {
-	std::cerr << c["type"] << std::endl;
+//	std::cerr << c["type"] << std::endl;
 	if (c["type"] == "Plane")
 		return new Plane(json_to_v3(c["k"]), c["c"], json_parse_material(c["m"]));
 	if (c["type"] == "Sphere")
