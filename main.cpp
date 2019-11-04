@@ -31,13 +31,11 @@ int MAX_DEP;
 Vector3f tot[1000][1000];
 int cnt = 0;
 
-#define NO_MIS
+//0: MIS (default), 1: COS, 2: RAW
+#define SAMPLER 0
 inline Vector3f trace(RNG_TYPE& g, Ray ray)
 {
 	Vector3f col(0, 0, 0), coe(1, 1, 1);
-#ifndef NO_MIS
-	bool typ = g() % 2 == 0;
-#endif
 	for (int j = 0; ; ++j)
 	{
 		Hit hit;
@@ -63,40 +61,46 @@ inline Vector3f trace(RNG_TYPE& g, Ray ray)
 		Vector3f p0 = hit.norm, p1, p2;
 		createCoordinateSystem(p0, p1, p2);
 		float r = hit.obj->m->roughness;
-#ifndef NO_MIS
-		if(typ)
+#if SAMPLER == 0
+		if(g() % 2)
 		{
-			float C = sqrtf(randf(g)), phi = randf(g) * PI * 2;
-			float sinTheta = sqrtf(1 - C * C);
+			float cog = sqrtf(randf(g)), phi = randf(g) * PI * 2;
+			float sinTheta = sqrtf(1 - cog * cog);
+			float C = cog * 2;
 			float y = sinTheta * cosf(phi), z = sinTheta * sinf(phi);
 			Vector3f np = C * p0 + y * p1 + z * p2;
 			Vector3f H = np - ray.d; H.normalize();
-			float NH = Vector3f::dot(H, p0);
-			float nhh = NH * NH;
-			float D = expf((nhh - 1) / (r * r * nhh)) / (r * r * nhh * nhh);
+			float co = Vector3f::dot(H, p0);
+			float D = expf((1 - 1.0 / (co * co)) / (r * r)) / (r * r * co * co * co);
 			if (D < 0) D = 0;
-			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / C / 2 *((C * C) / (C * C + D * D)) * 2;
+			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / C *((C * C) / (C * C + D * D)) * 2;
 			ray = Ray(hitp, np);
 		}
 		else
 		{
 			float u = randf(g);
 			float co = sqrtf(1 / (1 - r * r * logf(1 - u)));
-			float nhh = co * co;
-			float D = expf((nhh - 1) / (r * r * nhh)) / (r * r * nhh * nhh);
+			float D = expf((1 - 1.0 / (co * co)) / (r * r)) / (r * r * co * co * co);
 			float phi = randf(g) * 2 * PI, g = sqrtf(1 - co * co);
 			Vector3f H = p0 * co + (p1 * cosf(phi) + p2 * sinf(phi)) * g;
-			Vector3f np = H * 2 + ray.d; np.normalize();
-			float C = Vector3f::dot(p0, np); if (C < 0) C = 0;
-			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / D * ((D * D) / (C * C + D * D)) * 2;
+			Vector3f np = H * 2 * Vector3f::dot(H,-ray.d) + ray.d; np.normalize();
+			float C = Vector3f::dot(p0, np) * 2; if (C < 0) C = 0;
+			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / D *((D * D) / (C * C + D * D)) * 2;
 			ray = Ray(hitp, np);
 		}
-#else
+#elif SAMPLER == 1
 		float C = sqrtf(randf(g)), phi = randf(g) * PI * 2;
 		float sinTheta = sqrtf(1 - C * C);
 		float y = sinTheta * cosf(phi), z = sinTheta * sinf(phi);
 		Vector3f np = C * p0 + y * p1 + z * p2;
 		coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / C / 2;
+		ray = Ray(hitp, np);
+#else
+		float C = randf(g), phi = randf(g) * PI * 2;
+		float sinTheta = sqrtf(1 - C * C);
+		float y = sinTheta * cosf(phi), z = sinTheta * sinf(phi);
+		Vector3f np = C * p0 + y * p1 + z * p2;
+		coe = coe * hit.obj->m->BRDF(ray.d, np, hit);
 		ray = Ray(hitp, np);
 #endif
 	}
