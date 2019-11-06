@@ -1,5 +1,4 @@
 #include <iostream>
-#include "image.h"
 #include "camera.h"
 #include "group.h"
 #include "sphere.h"
@@ -14,6 +13,8 @@
 #include <random>
 #include "ThreadPool.h"
 #include "sceneloader.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 Scene load_scene();
 Scene scene; int w, h;
 
@@ -66,26 +67,30 @@ inline Vector3f trace(RNG_TYPE& g, Ray ray)
 		{
 			float cog = sqrtf(randf(g)), phi = randf(g) * PI * 2;
 			float sinTheta = sqrtf(1 - cog * cog);
-			float C = cog * 2;
+//			float C = cog * 2;
 			float y = sinTheta * cosf(phi), z = sinTheta * sinf(phi);
-			Vector3f np = C * p0 + y * p1 + z * p2;
+			Vector3f np = cog * p0 + y * p1 + z * p2;
 			Vector3f H = np - ray.d; H.normalize();
 			float co = Vector3f::dot(H, p0);
-			float D = expf((1 - 1.0 / (co * co)) / (r * r)) / (r * r * co * co * co);
-			if (D < 0) D = 0;
-			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / C *((C * C) / (C * C + D * D)) * 2;
+//			float D = expf((1 - 1.0 / (co * co)) / (r * r)) / (r * r * co * co * co);
+//			if (D < 0) D = 0;
+			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / cog / 2;// *((C * C) / (C * C + D * D)) * 2;
 			ray = Ray(hitp, np);
 		}
 		else
 		{
 			float u = randf(g);
 			float co = sqrtf(1 / (1 - r * r * logf(1 - u)));
-			float D = expf((1 - 1.0 / (co * co)) / (r * r)) / (r * r * co * co * co);
+			float d = expf((1 - 1.0 / (co * co)) / (r * r)) / (r * r * co * co * co);
+//			float D = d;// / co;
 			float phi = randf(g) * 2 * PI, g = sqrtf(1 - co * co);
 			Vector3f H = p0 * co + (p1 * cosf(phi) + p2 * sinf(phi)) * g;
 			Vector3f np = H * 2 * Vector3f::dot(H,-ray.d) + ray.d; np.normalize();
-			float C = Vector3f::dot(p0, np) * 2; if (C < 0) C = 0;
-			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / D *((D * D) / (C * C + D * D)) * 2;
+			if (Vector3f::dot(np, p0) < 0)
+				break;
+//			float C = Vector3f::dot(p0, np) * 2;
+			d /= Vector3f::dot(np, H) * 2;
+			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / d;// *((D * D) / (C * C + D * D)) * 2;
 			ray = Ray(hitp, np);
 		}
 #elif SAMPLER == 1
@@ -128,23 +133,33 @@ ThreadPool *pool;
 void reshade(bool keep)
 {
 	if (!keep) cnt = 1; else ++cnt;
+	unsigned char* img = 0; int ls = 0;
 	Camera* camera = scene.camera;
+	int w = camera->getWidth(), h = camera->getHeight(), s = w * h * 3;
+	if (s != ls) free(img), img = (unsigned char* )malloc(sizeof(unsigned char) * (ls=s));
 	std::cerr << "shading start (" << keep << "," << cnt << ")" << std::endl;
 	time_t t1 = clock();
-	Image renderedImg(camera->getWidth(), camera->getHeight());
 	if (!keep)
-		for (int x = 0; x < camera->getWidth(); ++x)
-			for (int y = 0; y < camera->getHeight(); ++y)
+		for (int x = 0; x < w; ++x)
+			for (int y = 0; y < h; ++y)
 				tot[x][y] = Vector3f::ZERO;
-	std::vector<std::future<bool>> v(camera->getWidth());
-	for (int x = 0; x < camera->getWidth(); ++x)
+	std::vector<std::future<bool>> v(w);
+	for (int x = 0; x < w; ++x)
 		v[x]=pool->enqueue(execute, camera, x);
-	for (int x = 0; x < camera->getWidth(); ++x) v[x].get();
-	for (int x = 0; x < camera->getWidth(); ++x)
-		for (int y = 0; y < camera->getHeight(); ++y)
-			renderedImg.SetPixel(x, camera->getHeight() - 1 - y, tot[x][y]/cnt);
+	for (int x = 0; x < w; ++x) v[x].get();
+	for (int x = 0; x < w; ++x)
+		for (int y = 0; y < h; ++y)
+		{
+			for (int j = 0; j < 3; ++j)
+			{
+				int w = tot[x][y][j] / cnt * 255;
+				if (w < 0) w = 0;
+				if (w > 255) w = 255;
+				img[x * 3 + y * h * 3 + j] = w;
+			}
+		}
 	time_t t2 = clock();
-	renderedImg.SaveBMP("output.bmp");
+	stbi_write_bmp("output.bmp", w, h, 3, img);
 	std::cerr << "end shading " << (t2 - t1) * 1.0 / CLOCKS_PER_SEC << "s    " << 1.0 / ((t2 - t1) * 1.0 / CLOCKS_PER_SEC) << "fps\n";
 	std::cerr << "time passed: " << t2 * 1.0 / CLOCKS_PER_SEC << "s\n";
 }

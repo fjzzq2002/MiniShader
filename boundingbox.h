@@ -57,7 +57,7 @@ public:
 	}
 	bool intersect(const Ray& r, float tmin,float tmax) {
 		Vector3f o = r.o, d = r.d;
-		const float eps = 1e-3;
+		const float eps = 1e-2;
 		if (a[0] - eps <= o[0] && o[0] <= b[0] + eps && a[1] - eps <= o[1] && o[1] <= b[1] + eps && a[2] - eps <= o[2] && o[2] <= b[2] + eps)
 			return 1;
 		if (a[0] > b[0]) return 0; //empty box

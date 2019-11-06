@@ -1,7 +1,6 @@
 #ifndef SCENELOADER_H
 #define SCENELOADER_H
 #include <iostream>
-#include "image.h"
 #include "camera.h"
 #include "group.h"
 #include "sphere.h"
