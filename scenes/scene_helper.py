@@ -1,11 +1,26 @@
 import json
 import sys
-class Material():
+class Material(): #for backward compatibility
+    def __init__(self,dc=(0,0,0),sc=(0,0,0),r=0,ec=(0,0,0)):
+        sys.stderr.write('[scene helper] warning: Material is deprecated, please use BRDFMaterial instead\n')
+        self.dc=dc
+        self.sc=sc
+        self.r=r
+        self.ec=ec
+class BRDFMaterial():
     def __init__(self,dc=(0,0,0),sc=(0,0,0),r=0,ec=(0,0,0)):
         self.dc=dc
         self.sc=sc
         self.r=r
         self.ec=ec
+class MirrorMaterial():
+    def __init__(self,reflectc=(1,1,1)):
+        self.c=reflectc
+class SolidGlassMaterial():
+    def __init__(self,n=0.9,reflectc=(1,1,1),refractc=(1,1,1)):
+        self.n=n
+        self.reflectc=reflectc
+        self.refractc=refractc
 class Plane():
     def __init__(self,k,c,m):
         self.k=k
@@ -45,14 +60,38 @@ class PointLight():
     def __init__(self,o,c):
         self.o=o
         self.c=c
+class RotateBSpline():
+    def __init__(self,o,c,m):
+        self.o=o
+        self.c=c
+        self.m=m
 def obj_2_json(obj):
-    if isinstance(obj,Material):
+    if isinstance(obj,Material) or isinstance(obj,BRDFMaterial):
         return {
-            "type": "Material",
+            "type": "BRDFMaterial",
             "dc": obj.dc,
             "sc": obj.sc,
             "r": obj.r,
             "ec": obj.ec
+        }
+    if isinstance(obj,SolidGlassMaterial):
+        return {
+            "type": "SolidGlassMaterial",
+            "n": obj.n,
+            "reflectc": obj.reflectc,
+            "refractc": obj.refractc
+        }
+    if isinstance(obj,MirrorMaterial):
+        return {
+            "type": "MirrorMaterial",
+            "c": obj.c
+        }
+    if isinstance(obj,RotateBSpline):
+        return {
+            "type": "RotateBSpline",
+            "o": obj.o,
+            "c": obj.c,
+            "m": obj.m
         }
     if isinstance(obj,Plane):
         return {

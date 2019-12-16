@@ -63,7 +63,7 @@ public:
 	bool intersect(int id, const Ray& r, Hit& h, float tmin) {
 		if (id < (int)obj.size())
 			return obj[id]->intersect(r, h, tmin);
-		if (!box[id].intersect(r,tmin,h.t+1e-3)) return 0;
+		if (!box[id].intersect(r, tmin, h.t + 1e-3)) return 0;
 		bool ok = 0;
 		ok |= intersect(ch[id*2], r, h, tmin);
 		ok |= intersect(ch[id*2+1], r, h, tmin);
@@ -82,6 +82,7 @@ public:
 		bool ok = 0;
 		for (auto g : rs)
 			ok |= intersect(g, r, h, tmin);
+		if (ok && h.obj->m->fix_norm() && Vector3f::dot(h.norm, -r.d) < 0) h.norm = -h.norm;
 		return ok;
 #endif
 	}

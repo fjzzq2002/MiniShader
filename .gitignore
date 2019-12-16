@@ -1,4 +1,5 @@
 VSBuild/
 Build/
-output.bmp
+output*.bmp
 scenes/scene.json
+*.hdr

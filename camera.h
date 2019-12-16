@@ -61,7 +61,8 @@ public:
 	}
 
 	Ray generateRay(int x, int y, RNG_TYPE&rng) const override {
-		Vector3f g((x+randf(rng)-0.5 - (width - 1) / 2.0f), (y+randf(rng)-0.5 - (height - 1) / 2.0f), dist);
+		Vector3f g(x+sqrtf(randf(rng))*(0.5-rng()%2) - (width - 1) / 2.0f,
+			y+sqrtf(randf(rng))*(0.5-rng()%2) - (height - 1) / 2.0f, dist);
 		g.normalize();
 		return Ray(center, Matrix3f(horizontal, -up, direction, 1) * g);
 	}
@@ -97,12 +98,14 @@ public:
 	}
 
 	Ray generateRay(int x, int y, RNG_TYPE& rng) const override {
-		Vector3f g((x+randf(rng)-0.5 - (width - 1) / 2.0f), (y+randf(rng)-0.5 - (height - 1) / 2.0f), dist);
+		Vector3f g(x + sqrtf(randf(rng)) * (0.5 - rng() % 2) - (width - 1) / 2.0f,
+			y + sqrtf(randf(rng)) * (0.5 - rng() % 2) - (height - 1) / 2.0f, dist);
+		//Vector3f g((x+randf(rng)-0.5 - (width - 1) / 2.0f), (y+randf(rng)-0.5 - (height - 1) / 2.0f), dist);
 		g.normalize();
 		float a = randf(rng) * (2 * PI);
-		Vector3f df = up * cosf(a) + horizontal * sinf(a); df *= radius*randf(rng);
-		return Ray(center + df, Matrix3f(horizontal, -up, direction, 1) *
-			(g * length - df).normalized());
+		Vector3f df = up * cosf(a) + horizontal * sinf(a); df *= radius*sqrtf(randf(rng));
+		return Ray(center + (Matrix3f(horizontal, -up, direction, 1)*df), (Matrix3f(horizontal, -up, direction, 1) *
+			(g * length - df)).normalized());
 	}
 };
 

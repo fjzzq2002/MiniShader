@@ -8,7 +8,7 @@ light=[]
 wall_mat=Material((1,1,1),(0.7,0.7,0.7),0.3)
 blue_wall_mat=Material((0,0,0.85),(0,0,0.7),0.3)
 red_wall_mat=Material((0.85,0,0),(0.7,0,0),0.3)
-light_mat=Material((1,1,1),(0.7,0.7,0.7),0.3,(10,10,10))
+light_mat=Material((1,1,1),(0.7,0.7,0.7),0.3,(100,100,100))
 ball_mat=Material((0.85,0.85,0.85),(0.9,0.9,0.9),0.05)
 obj.append(Plane((1,0,0),-100,red_wall_mat))
 obj.append(Plane((-1,0,0),-100,blue_wall_mat))
