@@ -15,13 +15,23 @@ namespace Poly_Solver {
 		if (v.size()) v.pop_back();
 		return v;
 	}
-	vector<double> poly_solve(vector<double> v, double l, double r, double eps = 1e-6, bool verify = true) {
+	vector<double> poly_solve(vector<double> v, double l, double r, double eps = 1e-8) {
 		static RNG_TYPE rng;
-		vector<double> dv = de(v), s;
-		int retry = 0;
+		vector<double> dv, s;
+		int retry = 0, tat=0;
 		while (v.size() > 1) {
+			double mx = 0;
+			for (auto t : v) mx = max(mx, fabs(t));
+			if (mx)
+			{
+				for (auto& t : v) t /= mx;
+			}
+			dv = de(v);
 			double g = l + randf(rng) * (r - l);
-			for (int j = 1; j <= 15; ++j) {
+			++tat;
+			if (tat % 5 == 0) g = l;
+			else if (tat % 5 == 1) g = r;
+			for (int j = 1; j <= 30; ++j) {
 				g = g - poly_calc(v, g) / poly_calc(dv, g);
 				if (g != g || g > 1e10 || g < -1e10)
 					break;
@@ -38,7 +48,7 @@ namespace Poly_Solver {
 				}
 				nx.erase(nx.begin()); v = nx;
 			}
-			if (retry >= 3) break;
+			if (retry >= 14) break;
 		}
 		return s;
 		/*
@@ -77,7 +87,7 @@ namespace Poly_Solver {
 		return o;*/
 	}
 	pair<double, double> poly_peak(vector<double> v, double l, double r) {
-		vector<double> g = poly_solve(de(v), l, r, 1e-3, false); g.push_back(r);
+		vector<double> g = poly_solve(de(v), l, r, 1e-3); g.push_back(r);
 		double mi=poly_calc(v,l), mx=mi;
 		for (auto t : g)
 		{

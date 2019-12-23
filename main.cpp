@@ -9,6 +9,7 @@
 #include "triangle.h"
 #include "rotate_bspline.h"
 #include "scene.h"
+#include "runtime.h"
 #include <cmath>
 #include <ctime>
 #include <random>
@@ -16,7 +17,6 @@
 #include "sceneloader.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
-Scene load_scene();
 Scene scene; int w, h;
 
 int MAX_DEP;
@@ -24,36 +24,27 @@ int MAX_DEP;
 Vector3f tot[1000][1000];
 int cnt = 0;
 
-inline Vector3f trace(RNG_TYPE& g, Ray ray)
+inline Vector3f trace(Runtime& rt, Ray ray)
 {
 	Vector3f col(0, 0, 0), coe(1, 1, 1);
-	/*
-	Sphere fog(Vector3f(0, 0, 0), 10000, nullptr);
-	float fog_k = 100; //the smaller the more foggy
-	float fog_d = 1; //the smaller the larger the deflect, shouldn't be lower than 1
-	float fog_c = 1;*/
 	for (int j = 0; ; ++j)
 	{
-		Hit hit;// , hit_fog;
-//		float l = 1/(-log(0.000001 + randf(g)*(1-0.000001*2))) * fog_k;
-//		cerr << l << "qwq\n";
+		Hit hit;
 		bool isIntersect = scene.group.intersect(ray, hit, float(1e-3));
-		/*
-		if (fog.intersect_solid(ray, hit_fog, float(1e-3)) && (!isIntersect || hit.t > hit_fog.t + l)
-			&& fog.inside(ray.o + ray.d * (hit_fog.t + l))) { //fog deflect
-//			cerr << "deflect "<<l<<"\n";
-			//likely a small deflect, unlikely a big deflect
-			float nl = 1 - pow(randf(g), fog_d) * 2;
-			ray.o += ray.d * (hit_fog.t + l);
-			Vector3f p0 = ray.d, p1, p2;
-			createCoordinateSystem(p0, p1, p2);
-			float nd = randf(g) * (2 * PI);
-			ray.d = p0 * nl + sqrtf(1 - nl * nl) * (p1 * cosf(nd) + p2 * sinf(nd));
-			coe = col * Vector3f(fog_c, fog_c, fog_c);
-			--j;
-			continue;
-		}*/
 		if (!isIntersect) break;
+		if(MAX_DEP<0)
+		{
+			if(MAX_DEP==-1)
+				col += (hit.norm+Vector3f(0.5,0.5,0.5));
+			else if(MAX_DEP==-2)
+				col += (ray.pos(hit.t)/3);
+			else
+			{
+				std::cerr << "unknown debug mode\n";
+				exit(-1);
+			}
+			break;
+		}
 		for (auto l : scene.point_lights)
 		{
 			Hit hit2;
@@ -67,19 +58,28 @@ inline Vector3f trace(RNG_TYPE& g, Ray ray)
 			}
 			if (!t) col += hit.obj->m->shade(ray, hit, *l) * coe;
 		}
-		if (!hit.obj->m->sample(col, hit, ray, coe, g)) break;
+		if (!hit.obj->m->sample(col, hit, ray, coe, rt)) break;
 		if (j >= MAX_DEP) break;
 	}
 	return col;
 }
 bool execute(Camera* camera, int x)
 {
-	static RNG_TYPE* rng[1000];
-	if (!rng[x]) rng[x] = new RNG_TYPE(x);
+	static Runtime rt[1000];
+	if (!rt[x].g)
+	{
+		rt[x].g = new RNG_TYPE(x);
+		/*
+		rt[x].davg.resize(scene.mat_num);
+		rt[x].favg.resize(scene.mat_num);
+		for (auto& x : rt[x].davg) x = 1;
+		for (auto& x : rt[x].favg) x = 1;
+		*/
+	}
 	for (int y = int(camera->getHeight() - 1); y >= 0; --y)
 	{
-		Ray camRay = camera->generateRay(x, y, *rng[x]);
-		Vector3f col = trace(*rng[x], camRay);
+		Ray camRay = camera->generateRay(x, y, *rt[x].g);
+		Vector3f col = trace(rt[x], camRay);
 		auto clamp = [&](float t) {if (t > 10) t = 10; if (t < 0) t = 0; if (t != t) t = 0; return t; };
 		col[0] = clamp(col[0]);
 		col[1] = clamp(col[1]);

@@ -40,6 +40,10 @@ struct Rotate_BSpline_Segment : public Object {
 				}
 				for(auto g:og)
 				if (g >= tmin && g < h.t) {
+					double gx = poly_calc(px, u);
+					Vector3f f = ray.pos(g) - o;
+					double l = f[0] * f[0] + f[2] * f[2]; l -= gx * gx;
+					if (fabs(l) > 1e-3) continue;
 					h.t = g; h.obj = this;
 					Vector3f pos = ray.o + ray.d * h.t - o,
 						pyy = Vector3f(0, 1, 0),
@@ -76,6 +80,10 @@ struct Rotate_BSpline_Segment : public Object {
 			double g = poly_calc(py, u);
 			g = (g + b1) * k1;
 			if (g >= tmin && g < h.t) {
+				double gx = poly_calc(px, u);
+				Vector3f f = ray.pos(g) - o;
+				double l = f[0] * f[0] + f[2] * f[2]; l -= gx * gx;
+				if (fabs(l) > 1e-4) continue;
 				h.t = g; h.obj = this;
 				Vector3f pos = ray.o + ray.d * h.t - o,
 					pyy = Vector3f(0, 1, 0),

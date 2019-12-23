@@ -84,7 +84,7 @@ Material* json_parse_material(const T& c)
 	else if (c["type"] == "MirrorMaterial") {
 		return mat_map[d] = new MirrorMaterial(json_to_texture(c["c"]));
 	}
-	assert(0);
+	else assert(0);
 }
 template<class T>
 PointLight* json_parse_light(const T& c)

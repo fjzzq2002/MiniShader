@@ -82,7 +82,8 @@ public:
 		bool ok = 0;
 		for (auto g : rs)
 			ok |= intersect(g, r, h, tmin);
-		if (ok && h.obj->m->fix_norm() && Vector3f::dot(h.norm, -r.d) < 0) h.norm = -h.norm;
+		if (ok && h.obj->m->fix_norm() && Vector3f::dot(h.norm, -r.d) < 0)
+			h.norm = -h.norm;
 		return ok;
 #endif
 	}

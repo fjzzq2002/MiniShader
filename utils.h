@@ -85,9 +85,9 @@ std::vector<T> poly_neg(std::vector<T> a) {
 	return a;
 }
 double poly_calc(const std::vector<double>& v, double x) {
-	double s = 0;
-	for (int j = int(v.size()) - 1; j >= 0; --j)
-		s = s * x + v[j];
+	double s = 0, u = 1;
+	for (auto p : v)
+		s += u * p, u *= x;
 	return s;
 }
 #endif

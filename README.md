@@ -6,7 +6,7 @@ Note that the samples in the samples folder might be rendered using old versions
 
 #### How to build
 
-If gnu make is working for you, run `build.sh` to build.
+If gnu make is working for you, run `build.sh` to build. You may need to modify `CMakeLists.txt`.
 
 Otherwise you can use `cmake-gui` to build or build manually.
 

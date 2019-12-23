@@ -2,6 +2,7 @@
 #define MATERIAL_H
 #include <algorithm>
 #include "utils.h"
+#include "runtime.h"
 #include "ray.h"
 #include "hit.h"
 #include "light.h"
@@ -11,7 +12,7 @@ protected:
 	Material() {}
 public:
 	virtual Vector3f shade(const Ray& ray, const Hit& hit, const PointLight& l) const=0;
-	virtual bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, RNG_TYPE& g) const=0;
+	virtual bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt) const=0;
 	virtual bool need_coords() const{
 		return 0;
 	}
@@ -57,6 +58,47 @@ public:
 		return LN * diffuseColor.get(hit.pos)
 			+ D * F * G / (4 * VN);
 	}
+
+	Vector3f BRDF0(const Vector3f& in, const Vector3f& out, const Hit& hit) const {
+		Vector3f L = out.normalized();
+		Vector3f N = hit.norm;
+		float LN = Vector3f::dot(L, N);
+		if (LN <= 0) return Vector3f::ZERO;
+		Vector3f R = 2 * LN * N - L, V = -in; V.normalize();
+		Vector3f H = L + V; H.normalize();
+		float HN = Vector3f::dot(H, N), VH = Vector3f::dot(V, H),
+			VN = Vector3f::dot(V, N), LH = Vector3f::dot(L, H);
+		if (VN < 0) return Vector3f::ZERO; //?
+		float nhh = HN * HN;
+		float D = expf((nhh - 1) / (roughness * roughness * nhh)) / (roughness * roughness * nhh * nhh);
+		//		float D = roughness * roughness / (PI * td * td);
+		float u = 1 - VN; //u^5
+		u *= u; u *= u; u *= 1 - VN;
+		Vector3f F = specularColor.get(hit.pos) + (1 - specularColor.get(hit.pos)) * u;
+		float G = std::min(std::min(HN * VN / VH, HN * LN / VH) * 2, float(1));
+		return LN * diffuseColor.get(hit.pos);
+	}
+
+	Vector3f BRDF1(const Vector3f& in, const Vector3f& out, const Hit& hit) const {
+		Vector3f L = out.normalized();
+		Vector3f N = hit.norm;
+		float LN = Vector3f::dot(L, N);
+		if (LN <= 0) return Vector3f::ZERO;
+		Vector3f R = 2 * LN * N - L, V = -in; V.normalize();
+		Vector3f H = L + V; H.normalize();
+		float HN = Vector3f::dot(H, N), VH = Vector3f::dot(V, H),
+			VN = Vector3f::dot(V, N), LH = Vector3f::dot(L, H);
+		if (VN < 0) return Vector3f::ZERO; //?
+		float nhh = HN * HN;
+		float D = expf((nhh - 1) / (roughness * roughness * nhh)) / (roughness * roughness * nhh * nhh);
+		//		float D = roughness * roughness / (PI * td * td);
+		float u = 1 - VN; //u^5
+		u *= u; u *= u; u *= 1 - VN;
+		Vector3f F = specularColor.get(hit.pos) + (1 - specularColor.get(hit.pos)) * u;
+		float G = std::min(std::min(HN * VN / VH, HN * LN / VH) * 2, float(1));
+		return D * F * G / (4 * VN);
+	}
+
 	Vector3f shade(const Ray& ray, const Hit& hit, const PointLight& l) const override{
 		return BRDF(ray.d, l.o - ray.pos(hit.t), hit) * l.c;
 	}
@@ -65,7 +107,10 @@ public:
 		return diffuseColor.need_coord() || specularColor.need_coord() || emissionColor.need_coord();
 	}
 	
-	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, RNG_TYPE& g) const override{
+	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt) const override{
+		RNG_TYPE& g = *rt.g;
+//		float& davg = rt.davg[this->id];
+//		float& favg = rt.favg[this->id];
 		col += this->emissionColor.get(hit.pos) * coe;
 		if (Vector3f::dot(hit.norm, -ray.d) < 0) return 0;
 		Vector3f hitp = ray.pos(hit.t);
@@ -73,35 +118,52 @@ public:
 		createCoordinateSystem(p0, p1, p2);
 		float r = this->roughness;
 #if SAMPLER == 0
-		if (g() % 2)
+		if (0)//g() % 2)
 		{
 			float cog = sqrtf(randf(g)), phi = randf(g) * PI * 2;
 			float sinTheta = sqrtf(1 - cog * cog);
-			//			float C = cog * 2;
+			float C = cog * 2;
 			float y = sinTheta * cosf(phi), z = sinTheta * sinf(phi);
 			Vector3f np = cog * p0 + y * p1 + z * p2;
 			Vector3f H = np - ray.d; H.normalize();
 			float co = Vector3f::dot(H, p0);
-			//			float D = expf((1 - 1.0 / (co * co)) / (r * r)) / (r * r * co * co * co);
-			//			if (D < 0) D = 0;
-			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / cog / 2;// *((C * C) / (C * C + D * D)) * 2;
+			float D = expf((1 - 1.0 / (co * co)) / (r * r)) / (r * r * co * co * co);
+			if (D < 0) D = 0;
+			coe = coe * this->BRDF0(ray.d, np, hit) / cog;
+//			coe = coe * this->BRDF0(ray.d, np, hit) / cog / 2 * 2;// *((C * C) / (C * C + D * D)) * 2;
 			ray = Ray(hitp, np);
 		}
 		else
 		{
-			float u = randf(g);
-			float co = sqrtf(1 / (1 - r * r * logf(1 - u)));
-			float d = expf((1 - 1.0 / (co * co)) / (r * r)) / (r * r * co * co * co);
-			//			float D = d;// / co;
-			float phi = randf(g) * 2 * PI, g = sqrtf(1 - co * co);
-			Vector3f H = p0 * co + (p1 * cosf(phi) + p2 * sinf(phi)) * g;
-			Vector3f np = H * 2 * Vector3f::dot(H, -ray.d) + ray.d; np.normalize();
-			if (Vector3f::dot(np, p0) < 0)
+			int fail = 0;
+			while (1)
+			{
+				float u = randf(g);
+				float co = sqrtf(1 / (1 - r * r * logf(1 - u)));
+				float d = expf((1 - 1.0 / (co * co)) / (r * r)) / (r * r * co * co * co);
+				//			float D = d;// / co;
+				float phi = randf(g) * 2 * PI, g = sqrtf(1 - co * co);
+				Vector3f H = p0 * co + (p1 * cosf(phi) + p2 * sinf(phi)) * g;
+				Vector3f np = H * 2 * Vector3f::dot(H, -ray.d) + ray.d; np.normalize();
+				if (Vector3f::dot(np, p0) < 0)
+				{
+					fail++;
+					if (fail >= 20)
+					{
+						return 0;
+					}
+					continue;
+				}
+				//			float C = Vector3f::dot(p0, np) * 2;
+				d /= Vector3f::dot(np, H) * 2;
+				davg = davg * 0.95 + 0.05 * d;
+				favg = favg * 0.95 + 0.05 * (1 + fail);
+				coe = coe * this->BRDF(ray.d, np, hit) / d * (davg/favg) / 2;
+				//				coe = coe * this->BRDF1(ray.d, np, hit) / d * davg * 2;
+//				coe = coe * this->BRDF1(ray.d, np, hit) * davg / d;// *2;// *((D * D) / (C * C + D * D)) * 2;
+				ray = Ray(hitp, np);
 				break;
-			//			float C = Vector3f::dot(p0, np) * 2;
-			d /= Vector3f::dot(np, H) * 2;
-			coe = coe * hit.obj->m->BRDF(ray.d, np, hit) / d;// *((D * D) / (C * C + D * D)) * 2;
-			ray = Ray(hitp, np);
+			}
 		}
 #elif SAMPLER == 1
 		float C = sqrtf(randf(g)), phi = randf(g) * PI * 2;
@@ -115,7 +177,7 @@ public:
 		float sinTheta = sqrtf(1 - C * C);
 		float y = sinTheta * cosf(phi), z = sinTheta * sinf(phi);
 		Vector3f np = C * p0 + y * p1 + z * p2;
-		coe = coe * hit.obj->m->BRDF(ray.d, np, hit);
+		coe = coe * this->BRDF(ray.d, np, hit);
 		ray = Ray(hitp, np);
 #endif
 #undef SAMPLER
@@ -146,7 +208,8 @@ public:
 		return reflectColor.need_coord();
 	}
 
-	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, RNG_TYPE& g) const override {
+	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt) const override {
+		RNG_TYPE& g = *rt.g;
 		coe = coe * reflectColor.get(hit.pos);
 		Vector3f np = hit.norm * 2 * Vector3f::dot(hit.norm, -ray.d) + ray.d; np.normalize();
 		ray.o = ray.pos(hit.t); ray.d = np; return 1;
@@ -174,8 +237,9 @@ public:
 		return reflectColor.need_coord() || refractColor.need_coord();
 	}
 
-	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, RNG_TYPE& g) const override {
+	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt) const override {
 		using std::cerr;
+		RNG_TYPE& g = *rt.g;
 		float co = Vector3f::dot(-ray.d, hit.norm);
 //		std::cerr << co << "sample!"<<" "<<hit.norm[0]<<"w"<<hit.norm[1]<<"w"<<hit.norm[2]<<" "<<ray.d[0]<<"w"<<ray.d[1]<<"w"<<ray.d[2]<<"\n";
 		if (co > 0) { //air->glass
