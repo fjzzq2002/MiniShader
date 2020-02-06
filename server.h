@@ -1,11 +1,11 @@
 #ifndef SERVER_H
 #define SERVER_H
-#include "utils.h"
 #include <iostream>
 #include <string.h>
 #include <vector>
 #include <string>
 #include "nlohmann/json.hpp"
+#include "utils.h"
 using json = nlohmann::json;
 #define ASIO_STANDALONE
 //add more defines if necessary

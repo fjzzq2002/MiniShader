@@ -2,8 +2,8 @@
 #define OBJECT_H
 
 #include <cassert>
-#include "utils.h"
 #include <limits>
+#include "utils.h"
 #include "material.h"
 #include "boundingbox.h"
 
@@ -11,6 +11,7 @@ class Ray;
 class Hit;
 class Object {
 public:
+	int remit = 0;
 	Material *m; //the material need to be manually assigned
 	Object(Material*m=0):m(m) {}
 	virtual bool intersect(const Ray& r, Hit& h, float tmin) = 0;

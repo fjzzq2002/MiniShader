@@ -1,20 +1,20 @@
 #ifndef GROUP_H
 #define GROUP_H
 #include <cassert>
-#include "utils.h"
-#include "ray.h"
-#include "object.h"
 #include <iostream>
 #include <vector>
 #include <algorithm>
-#include "memory.h"
+#include <memory>
+#include "utils.h"
+#include "ray.h"
+#include "object.h"
 using std::cerr;
 using std::endl;
 class Group{
 public:
 	std::vector<Object*> obj;
 	std::vector<int> ch;
-	std::vector<BoundingBox> box;
+	std::vector<BoundingBox> box,t1,t2;
 	std::vector<int> rs;
 	int bn;
 	int build(int* v,int vn,int c=0)
@@ -23,16 +23,31 @@ public:
 //		for (int j = 0; j < vn; ++j) cerr << v[j] << "|"; cerr << "EZ\n";
 		if (vn == 1) return v[0];
 		int p = bn++;
-		std::nth_element(v,v+vn/2,v+vn, [&](int p, int q) {return box[p].a[c] + box[p].b[c] < box[q].a[c] + box[q].b[c]; });
-		ch[p * 2] = build(v, vn / 2,(c+1)%3);
+		std::sort(v,v+vn, [&](int p, int q) {return box[p].a[c] + box[p].b[c] < box[q].a[c] + box[q].b[c]; });
+		t1[0] = BoundingBox::EMPTY;
+		for (int i = 0; i < vn; ++i)
+			t1[i+1] = t1[i] | box[v[i]];
+		t2[vn] = BoundingBox::EMPTY;
+		for (int i = vn - 1; i >= 0; --i)
+			t2[i] = t2[i + 1] | box[v[i]];
+		int I=vn/2;
+		float mxx = std::max(t1[I].area(),t2[I].area());
+		for (int i = 1; i < vn; ++i)
+		{
+			float ma = std::max(t1[i].area(), t2[i].area());
+			if (ma < mxx) mxx = ma, I = i;
+		}
+		ch[p * 2] = build(v, I, (c+1)%3);
 //		cerr << p << "FIRSTHALF ED\n";
-		ch[p * 2 + 1] = build(v + vn / 2, vn - vn / 2,(c+1)%3);
+		ch[p * 2 + 1] = build(v + I, vn - I,(c+1)%3);
 		box[p] = box[ch[p * 2]] | box[ch[p * 2 + 1]];
 		return p;
 	}
 	void reset_obj() {
 		int n = obj.size();
 		if (!n) return;
+		t1.resize(n+1);
+		t2.resize(n+1);
 		rs.clear();
 		ch.resize(n*4);
 		box.resize(n*2);
@@ -41,13 +56,13 @@ public:
 		for (int i = 0; i < n; ++i)
 			box[i] = obj[i]->getBound(),
 			vec.push_back(i);
-		sort(vec.begin(), vec.end(), [&](int p, int q) {return box[p].size() < box[q].size(); });
+		sort(vec.begin(), vec.end(), [&](int p, int q) {return box[p].area() < box[q].area(); });
 		int* cv = (int*)malloc(sizeof(int) * vec.size());
 		while (!vec.empty())
 		{
 			int cn = 0;
-			float u = box[vec.back()].size();
-			while (!vec.empty()&&box[vec.back()].size() * 8 >= u)
+			float u = box[vec.back()].area();
+			while (!vec.empty()&&box[vec.back()].area() * 4 >= u)
 				cv[cn++]=vec.back(), vec.pop_back();
 			rs.push_back(build(cv, cn));
 		}

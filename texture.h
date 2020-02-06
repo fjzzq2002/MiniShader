@@ -1,11 +1,11 @@
 #ifndef TEXTURE_H
 #define TEXTURE_H
-#include "utils.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "hdrloader.h"
 #include <iostream>
 #include <functional>
+#include "utils.h"
 enum TEXTURE_TYPE {TEXTURE_COLOR,TEXTURE_SCALE,TEXTURE_RECT};
 class Texture {
 public:
@@ -16,8 +16,14 @@ public:
 	int image_w, image_h, image_c;
 	unsigned char* image_buff_stbi;
 	float* hdr_buff;
-	Texture() :type(TEXTURE_COLOR), color(Vector3f::ZERO) {}
-	Texture(Vector3f c) :type(TEXTURE_COLOR), color(c) {}
+	bool empty = false;
+	bool is_empty() const { return empty; }
+	Texture() :type(TEXTURE_COLOR), color(Vector3f::ZERO) {
+		empty = true;
+	}
+	Texture(Vector3f c) :type(TEXTURE_COLOR), color(c) {
+		if (c == Vector3f::ZERO) empty = true;
+	}
 	Texture(const char* img) :type(TEXTURE_RECT)
 	{
 		std::string img_ = img;
@@ -38,7 +44,7 @@ public:
 						for (int w = 0; w < 2; ++w)
 							for (int g = 0; g < 2; ++g)
 								s += result.cols[(i * 2 + w) * result.height * 3 + (j * 2 + g) * 3 + k];
-						hdr_buff[i * image_h * 3 + j * 3 + k] = s / 4;
+						hdr_buff[i * image_h * 3 + j * 3 + k] = powf(s / 4, 0.1);
 					}
 		}
 		else {
@@ -69,7 +75,7 @@ public:
 				}
 				else {
 					for (int x = 0; x < 3; ++x)
-						g[x] = powf(hdr_buff[b * image_c + a * image_h * image_c + x], 1);// 0.8);
+						g[x] = hdr_buff[b * image_c + a * image_h * image_c + x];// 0.8);
 				}
 				return g;
 			};

@@ -12,12 +12,15 @@ protected:
 	Material() {}
 public:
 	virtual Vector3f shade(const Ray& ray, const Hit& hit, const PointLight& l) const=0;
-	virtual bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt) const=0;
+	virtual bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt, bool emit) const=0;
 	virtual bool need_coords() const{
 		return 0;
 	}
 	virtual bool fix_norm() const {
 		return 1;
+	}
+	virtual bool is_brdf() const {
+		return 0;
 	}
 };
 
@@ -107,11 +110,18 @@ public:
 		return diffuseColor.need_coord() || specularColor.need_coord() || emissionColor.need_coord();
 	}
 	
-	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt) const override{
+	bool is_brdf() const override{
+		return 1;
+	}
+	
+	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt, bool emit) const override{
 		RNG_TYPE& g = *rt.g;
 //		float& davg = rt.davg[this->id];
 //		float& favg = rt.favg[this->id];
-		col += this->emissionColor.get(hit.pos) * coe;
+//		if (!this->emissionColor.empty) {
+//			std::cerr << emit << "?\n";
+//		}
+		if(emit) col += this->emissionColor.get(hit.pos) * coe;
 		if (Vector3f::dot(hit.norm, -ray.d) < 0) return 0;
 		Vector3f hitp = ray.pos(hit.t);
 		Vector3f p0 = hit.norm, p1, p2;
@@ -208,7 +218,7 @@ public:
 		return reflectColor.need_coord();
 	}
 
-	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt) const override {
+	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt, bool emit) const override {
 		RNG_TYPE& g = *rt.g;
 		coe = coe * reflectColor.get(hit.pos);
 		Vector3f np = hit.norm * 2 * Vector3f::dot(hit.norm, -ray.d) + ray.d; np.normalize();
@@ -216,6 +226,73 @@ public:
 	}
 };
 
+
+
+class GlassMaterial : public Material {
+public:
+	const Texture reflectColor;
+	const Texture refractColor;
+	float refractCoef, r0;
+	BRDFMaterial *m;
+	float thickness;
+	GlassMaterial(float coef = 1,
+		const Texture & reflect_color = Vector3f::ZERO,
+		const Texture & refract_color = Vector3f::ZERO,
+		float thickness = 0) :
+		refractCoef(coef),
+		reflectColor(reflect_color), refractColor(refract_color),
+		thickness(thickness) {
+		refractCoef = 1 / refractCoef;
+		r0 = (1 - refractCoef) / (1 + refractCoef); r0 *= r0;
+		m = new BRDFMaterial(Vector3f(0.5, 0.5, 0.5), Vector3f(0.5, 0.5, 0.5), 0.3);
+	}
+
+	Vector3f shade(const Ray& ray, const Hit& hit, const PointLight& l) const override {
+		return Vector3f(0, 0, 0);
+	}
+
+	bool need_coords() const override {
+		return reflectColor.need_coord() || refractColor.need_coord();
+	}
+
+	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt, bool emit) const override {
+		using std::cerr;
+		RNG_TYPE& g = *rt.g;
+		float co = Vector3f::dot(-ray.d, hit.norm);
+		float t = thickness;
+		if (co < 0) co = -co, t=0;
+		float si = sqrtf(std::max(1 - co * co, float(0)));
+		float si2 = si * refractCoef;
+		float co2 = sqrt(1 - si2 * si2);
+		float rs = (refractCoef * co2 - co) / (refractCoef * co2 + co);
+		float rp = (co2 - refractCoef * co) / (co2 + refractCoef * co);
+		float r = (rs * rs + rp * rp) / 2;
+		//cerr << co << " " << r << "\n";
+//		r = 0.25 + 0.5 * r;
+		//Vector3f i1=ray.d, i2;
+		if (randf(g) > r) {
+			coe = coe * refractColor.get(hit.pos);
+			ray.o = ray.pos(hit.t+ t);
+		}
+		else {
+			coe = coe * reflectColor.get(hit.pos);
+			Vector3f np = hit.norm * 2 * Vector3f::dot(hit.norm, -ray.d) + ray.d; np.normalize();
+			ray.o = ray.pos(hit.t); ray.d = np;
+		}
+		/*
+		i2 = ray.d;
+		if (Vector3f::dot(i1, -hit.norm) < 0) i1 = -i1;
+		if (Vector3f::dot(i2, hit.norm) < 0) i2 = -i2;
+		Vector3f b=m->BRDF(i1, i2, hit);*/
+		/*
+		if (b[0] > 2) b[0] = 2;
+		if (b[1] > 2) b[1] = 2;
+		if (b[2] > 2) b[2] = 2;*/
+		//coe = coe * b; //not actually physical but could work
+		return 1;
+	}
+};
+//maybe wrong, not sure
 class SolidGlassMaterial : public Material {
 public:
 	const Texture reflectColor;
@@ -226,7 +303,9 @@ public:
 		const Texture& refract_color = Vector3f::ZERO) :
 		refractCoef(coef),
 		reflectColor(reflect_color),refractColor(refract_color) {
-		r0 = (1 - refractCoef) / (1 + refractCoef); r0 *= r0;
+		refractCoef = 1 / refractCoef;
+
+//		r0 = (1 - refractCoef) / (1 + refractCoef); r0 *= r0;
 	}
 
 	Vector3f shade(const Ray& ray, const Hit& hit, const PointLight& l) const override {
@@ -237,7 +316,7 @@ public:
 		return reflectColor.need_coord() || refractColor.need_coord();
 	}
 
-	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt) const override {
+	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt, bool emit) const override {
 		using std::cerr;
 		RNG_TYPE& g = *rt.g;
 		float co = Vector3f::dot(-ray.d, hit.norm);
@@ -261,10 +340,9 @@ public:
 					//					ray.d = -((-ray.d) * s + hit.norm).normalized();
 					if (si != 0) //unchanged otherwise
 						ray.d = (ray.d - hit.norm.normalized() * (sinf(s) / si)).normalized();
-					coe = coe * refractColor.get(hit.pos) / r;
+					coe = coe * refractColor.get(hit.pos);
 					return 1;
 				}
-				else coe = coe / (1 - r);
 			}
 		}
 		else { //glass->air
@@ -290,11 +368,11 @@ public:
 //				cerr << "prob=" << r << "  "<<r0<<"\n";
 				if (randf(g) > r) //refract
 				{
+//					std::cerr << "cool refract!\n";
 					ray = ray2;
-					coe = coe * refractColor.get(hit.pos) / r;
+					coe = coe * refractColor.get(hit.pos);
 					return 1;
 				}
-				else coe = coe / (1 - r);
 			}
 		}
 //		std::cerr << "reflect :(\n";
@@ -337,6 +415,90 @@ public:
 			radiance(reflRay, depth, Xi) * RP : radiance(Ray(x, tdir), depth, Xi) * TP) :
 			radiance(reflRay, depth, Xi) * Re + radiance(Ray(x, tdir), depth, Xi) * Tr);*/
 	}
-};
+}; 
+
+/*
+class SolidGlassMaterial : public Material {
+public:
+	const Texture reflectColor;
+	const Texture refractColor;
+	float refractCoef;// , r0;
+	SolidGlassMaterial(float coef = 1,
+		const Texture & reflect_color = Vector3f::ZERO,
+		const Texture & refract_color = Vector3f::ZERO) :
+		refractCoef(coef),
+		reflectColor(reflect_color), refractColor(refract_color) {
+		refractCoef = 1 / refractCoef;
+		//		r0 = (1 - refractCoef) / (1 + refractCoef); r0 *= r0;
+	}
+
+	Vector3f shade(const Ray& ray, const Hit& hit, const PointLight& l) const override {
+		return Vector3f(0, 0, 0);
+	}
+
+	bool need_coords() const override {
+		return reflectColor.need_coord() || refractColor.need_coord();
+	}
+
+	bool sample(Vector3f& col, const Hit& hit, Ray& ray, Vector3f& coe, Runtime& rt, bool emit) const override {
+		using std::cerr;
+		RNG_TYPE& g = *rt.g;
+		float co = Vector3f::dot(-ray.d, hit.norm);
+		//		std::cerr << co << "sample!"<<" "<<hit.norm[0]<<"w"<<hit.norm[1]<<"w"<<hit.norm[2]<<" "<<ray.d[0]<<"w"<<ray.d[1]<<"w"<<ray.d[2]<<"\n";
+		if (co > 0) { //air->glass
+			float si = sqrtf(std::max(1 - co * co, float(0)));
+			float si2 = si * refractCoef;
+			//			cerr << "check A " << si2 << "\n";
+			if (si2 <= 1) { //total reflection otherwise
+				float co2 = sqrt(1 - si2 * si2);
+				float rs = (refractCoef * co2 - co) / (refractCoef * co2 + co);
+				float rp = (co2 - refractCoef * co) / (co2 + refractCoef * co);
+				float r = (rs * rs + rp * rp) / 2;
+				//				cerr << "prob=" << r << "  " << r0 << "\n";
+				if (randf(g) > r) //refract
+				{
+					//get refraction ray as a linear combination
+					float beta = asinf(si), alpha = asinf(si2);
+					//					std::cerr << "refract A " << si << "->" << si2 << "  "<<beta<<"->"<<alpha<<"\n";
+					float s = beta - alpha;
+					ray.o = ray.pos(hit.t);
+					//					ray.d = -((-ray.d) * s + hit.norm).normalized();
+					if (si != 0) //unchanged otherwise
+						ray.d = (ray.d - hit.norm.normalized() * (sinf(s) / si)).normalized();
+					coe = coe * refractColor.get(hit.pos);
+					return 1;
+				}
+			}
+		}
+		else { //glass->air
+			co = -co;
+			float si = sqrtf(std::max(1 - co * co, float(0)));
+			float si2 = si / refractCoef;
+			if (si2 <= 1) { //total reflection otherwise
+					//get refraction ray as a linear combination
+				float beta = asinf(si), alpha = asinf(si2);
+				float s = beta - alpha;
+				Ray ray2;
+				ray2.o = ray.pos(hit.t);
+				if (si != 0) //unchanged otherwise
+					ray2.d = (ray.d + hit.norm.normalized() * (sinf(s) / si)).normalized();
+				else ray2.d = ray.d;
+				float co2 = Vector3f::dot(hit.norm, ray2.d);
+				float rs = (refractCoef * co - co2) / (refractCoef * co + co2);
+				float rp = (co - refractCoef * co2) / (co + refractCoef * co2);
+				float r = (rs * rs + rp * rp) / 2;
+				if (randf(g) > r) //refract
+				{
+					ray = ray2;
+					coe = coe * refractColor.get(hit.pos);
+					return 1;
+				}
+			}
+		}
+		coe = coe * reflectColor.get(hit.pos);
+		Vector3f np = hit.norm * 2 * Vector3f::dot(hit.norm, -ray.d) + ray.d; np.normalize();
+		ray.o = ray.pos(hit.t); ray.d = np; return 1;
+	}
+};*/
 
 #endif

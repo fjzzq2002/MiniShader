@@ -17,20 +17,25 @@
 #include "sceneloader.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
-Scene scene; int w, h;
+int w, h;
 
 int MAX_DEP;
 
-Vector3f tot[1000][1000];
+Vector3f tot[2000][2000];
 int cnt = 0;
+
+Scene scene;
+
+ThreadPool* pool;
 
 inline Vector3f trace(Runtime& rt, Ray ray)
 {
 	Vector3f col(0, 0, 0), coe(1, 1, 1);
 	for (int j = 0; ; ++j)
 	{
+		if (coe[0] == 0 && coe[1] == 0 && coe[2] == 0) break;
 		Hit hit;
-		bool isIntersect = scene.group.intersect(ray, hit, float(1e-3));
+		bool isIntersect = scene.group.intersect(ray, hit, float(1e-2));
 		if (!isIntersect) break;
 		if(MAX_DEP<0)
 		{
@@ -45,27 +50,57 @@ inline Vector3f trace(Runtime& rt, Ray ray)
 			}
 			break;
 		}
+		Vector3f pnt = ray.pos(hit.t);
 		for (auto l : scene.point_lights)
 		{
-			Hit hit2;
-			Vector3f pnt = ray.pos(hit.t);
-			Ray ray2(l->o, (pnt - l->o).normalized());
-			bool t = scene.group.intersect(ray2, hit2, float(1e-3));
+			Hit hit2; Ray ray2(l->o, (pnt - l->o).normalized());
+			bool t = scene.group.intersect(ray2, hit2, float(1e-4));
 			if (t)
 			{
 				pnt = ray2.pos(hit2.t) - pnt;
-				t &= fabs(pnt.m_elements[0]) > 1e-3 || fabs(pnt.m_elements[1]) > 1e-3 || fabs(pnt.m_elements[2]) > 1e-3;
+				t &= fabs(pnt.m_elements[0]) > 1e-1 || fabs(pnt.m_elements[1]) > 1e-1 || fabs(pnt.m_elements[2]) > 1e-1;
 			}
 			if (!t) col += hit.obj->m->shade(ray, hit, *l) * coe;
 		}
-		if (!hit.obj->m->sample(col, hit, ray, coe, rt)) break;
+		for (auto l : scene.point_lights_decay)
+		{
+			Hit hit2; Ray ray2(l->o, (pnt - l->o).normalized());
+			bool t = scene.group.intersect(ray2, hit2, float(1e-4));
+			if (t)
+			{
+				pnt = ray2.pos(hit2.t) - pnt;
+				t &= fabs(pnt.m_elements[0]) > 1e-1 || fabs(pnt.m_elements[1]) > 1e-1 || fabs(pnt.m_elements[2]) > 1e-1;
+			}
+			if (!t) col += hit.obj->m->shade(ray, hit, *l) * coe / hit2.t;
+		}
+		if (scene.triangle_lights.size()) {
+			Triangle* lp;
+			float u = randf(*rt.g) * scene.lights_area;
+			for (auto l : scene.triangle_lights)
+			{
+				lp = l; u -= l->area;
+				if (u < 0) break;
+			}
+			float a = randf(*rt.g), b = randf(*rt.g);
+			if (a + b > 1) a = 1 - a, b = 1 - b;
+			Vector3f o = lp->v[0] * (1 - a - b) + lp->v[1] * a + lp->v[2] * b;
+			Ray ray2(pnt, (o - pnt).normalized()); Hit hit2;
+			bool t = scene.group.intersect(ray2, hit2, float(1e-3));
+			if (t && hit2.obj == lp)
+				col += hit.obj->m->shade(ray, hit, PointLight(o,
+					((BRDFMaterial*)lp->m)->emissionColor.get(hit.pos))) * coe *
+					abs(Vector3f::dot(ray2.d, hit.norm)) / (hit2.t * hit2.t)
+					* scene.lights_area;
+		}
+		if (!hit.obj->m->sample(col, hit, ray, coe, rt, !(hit.obj->remit&&j!=0))) break;
 		if (j >= MAX_DEP) break;
 	}
 	return col;
 }
+
 bool execute(Camera* camera, int x)
 {
-	static Runtime rt[1000];
+	static Runtime rt[2000];
 	if (!rt[x].g)
 	{
 		rt[x].g = new RNG_TYPE(x);
@@ -88,8 +123,6 @@ bool execute(Camera* camera, int x)
 	}
 	return 1;
 }
-
-ThreadPool *pool;
 
 void reshade(bool keep)
 {
@@ -120,7 +153,7 @@ void reshade(bool keep)
 			}
 		}
 	time_t t2 = clock();
-	stbi_write_bmp("output.bmp", h, w, 3, img);
+	stbi_write_bmp("output.bmp", w, h, 3, img);
 	std::cerr << "end shading " << (t2 - t1) * 1.0 / CLOCKS_PER_SEC << "s    " << 1.0 / ((t2 - t1) * 1.0 / CLOCKS_PER_SEC) << "fps\n";
 	std::cerr << "time passed: " << t2 * 1.0 / CLOCKS_PER_SEC << "s\n";
 }

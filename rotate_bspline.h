@@ -1,9 +1,9 @@
 #ifndef ROTATE_BSPLINE_H
 #define ROTATE_BSPLINE_H
+#include <vector>
 #include "utils.h"
 #include "object.h"
 #include "polysolver.h"
-#include <vector>
 //currently only uniform bspline objects rotating through (X,Z) is supported.
 struct Rotate_BSpline_Segment : public Object {
 	//fill in these properties when constructing
@@ -71,7 +71,7 @@ struct Rotate_BSpline_Segment : public Object {
 		for (auto& u : z) u *= ray.d[2];
 		z[0] += (ray.o - o)[2];
 		std::vector<double> f = poly_minus(poly_add(poly_mul(x, x), poly_mul(z, z)), poly_mul(px, px));
-		std::vector<double> oo = poly_solve(f, l, r, 1e-7);
+		std::vector<double> oo = poly_solve(f, l, r, 1e-11);
 //		std::cerr << "good!" << f.size() << "w" << oo.size() << "!";
 //		for (auto c : oo) std::cerr << c << "|"<<poly_calc(px,c)<<"|"<<poly_calc(f,c)<<","; std::cerr << "\n";
 		bool suc = 0;
@@ -93,7 +93,7 @@ struct Rotate_BSpline_Segment : public Object {
 //				cerr<<pos[1]<<" "<<pos[0]*pos[0]+pos[2]*pos[2]<<"  "<<poly_calc(px,u)<<" "<<
 				h.norm = pxx * poly_calc(nx, u) + pyy * poly_calc(ny, u);
 				h.norm.normalize();
-				if (Vector3f::dot(h.norm, -ray.d)<0) h.norm = -h.norm;
+				//if (Vector3f::dot(h.norm, -ray.d)<0) h.norm = -h.norm;
 				//todo: add pos, too lazy atm
 				h.pos = Vector2f::ZERO; suc = 1;
 			}
@@ -111,7 +111,8 @@ struct Rotate_BSpline_Segment : public Object {
 		std::pair<double, double> by = poly_peak(py, l, r);
 //		std::cerr << l << "~" << r << "|";
 //		std::cerr << o[0] - ux << "," << o[1] + by.first << "," << o[2] - ux << " " << o[0] + ux << "," << o[1] + by.second << "," << o[2] + ux << "\n";
-		return b = BoundingBox(Vector3f(o[0] - ux, o[1] + by.first, o[2] - ux), Vector3f(o[0] + ux, o[1] + by.second, o[2] + ux));
+		return b = BoundingBox(Vector3f(o[0] - ux-1e-4, o[1] + by.first - 1e-4, o[2] - ux - 1e-4),
+			Vector3f(o[0] + ux+1e-4, o[1] + by.second + 1e-4, o[2] + ux + 1e-4));
 	}
 };
 std::vector<Rotate_BSpline_Segment*> Rotate_BSpline(Vector3f o, std::vector<Vector2f> controls, Material* m, int K=3) {

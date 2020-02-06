@@ -1,9 +1,9 @@
 #ifndef POLYSOLVER_H
 #define POLYSOLVER_H
-#include "utils.h"
 #include <vector>
 #include <math.h>
 #include <algorithm>
+#include "utils.h"
 //poor numerical stability, use with care
 namespace Poly_Solver {
 	using std::vector;

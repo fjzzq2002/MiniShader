@@ -1,8 +1,9 @@
 #ifndef HIT_H
 #define HIT_H
 #include <cassert>
-#include "utils.h"
 #include <limits>
+#include "utils.h"
+#include "object.h"
 class Object;
 class Hit {
 public:

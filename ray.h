@@ -2,8 +2,8 @@
 #define RAY_H
 
 #include <cassert>
-#include "utils.h"
 #include <limits>
+#include "utils.h"
 
 class Ray {
 public:

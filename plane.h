@@ -1,8 +1,8 @@
 #ifndef PLANE_H
 #define PLANE_H
 #include <cassert>
-#include "utils.h"
 #include <limits>
+#include "utils.h"
 #include "object.h"
 #include "ray.h"
 class Plane : public Object {

@@ -1,8 +1,8 @@
 #ifndef BOUNDINGBOX_H
 #define BOUNDINGBOX_H
 
-#include "utils.h"
 #include <cmath>
+#include "utils.h"
 #include "ray.h"
 
 class BoundingBox {
@@ -55,6 +55,11 @@ public:
 		}
 		return s;
 	}
+	float area()
+	{
+		if (a[1] > b[1] || a[2] > b[2] || a[0] > b[0]) return 0;
+		return (b[1] - a[1]) * (b[2] - a[2]) + (b[0] - a[0]) * (b[2] - a[2]) + (b[0] - a[0]) * (b[1] - a[1]) + 1e-4;
+	}
 	bool intersect(const Ray& r, float tmin,float tmax) {
 		Vector3f o = r.o, d = r.d;
 		const float eps = 1e-2;
@@ -62,6 +67,7 @@ public:
 			return 1;
 		if (a[0] > b[0]) return 0; //empty box
 		float t;
+		tmin -= eps; tmax += eps;
 		if (d[0] != 0.f)
 		{
 			if (d[0] > 0.f) t = (a[0] - o[0]) / d[0];
@@ -98,8 +104,8 @@ public:
 		return 0;
 	}
 };
-const BoundingBox BoundingBox::EMPTY(Vector3f(1e38, 1e38, 1e38), Vector3f(-1e38, -1e38, -1e38));
-const BoundingBox BoundingBox::FULL(Vector3f(-1e38, -1e38, -1e38), Vector3f(1e38, 1e38, 1e38));
+const BoundingBox BoundingBox::EMPTY(Vector3f(1e18, 1e18, 1e18), Vector3f(-1e18, -1e18, -1e18));
+const BoundingBox BoundingBox::FULL(Vector3f(-1e18, -1e18, -1e18), Vector3f(1e18, 1e18, 1e18));
 
 
 #endif
